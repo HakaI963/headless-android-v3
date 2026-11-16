@@ -6,7 +6,6 @@ import android.content.Intent;
 import android.os.Process;
 import android.util.Log;
 
-import java.lang.reflect.Field;
 
 /**
  * Process split.
