@@ -108,7 +108,9 @@ public final class SettingsActivity extends Activity {
         if (engine != null) {
             engine.restartMcp();
         }
-        endpoint.setText("http://" + Network.host(this) + ":" + Prefs.port(this) + "/mcp");
+        int bound = McpServer.port();
+        endpoint.setText("http://" + Network.host(this) + ":"
+                + (bound > 0 ? bound : Prefs.port(this)) + "/mcp");
         port.setText(String.valueOf(Prefs.port(this)));
         editing = false;
         toast("MCP restarted on " + Prefs.port(this));

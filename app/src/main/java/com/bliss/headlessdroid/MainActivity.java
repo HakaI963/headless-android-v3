@@ -173,7 +173,12 @@ public final class MainActivity extends Activity implements GridView.Listener {
         Ui.dot(dotShell, shell ? R.color.good : R.color.danger);
 
         boolean mcp = McpServer.running();
-        textMcp.setText(mcp ? "MCP :" + Prefs.port(this) : getString(R.string.mcp_offline));
+        int bound = McpServer.port();
+        // The server may have fallen back to the next free port, so the port
+        // shown is the one it actually bound, not the one that was configured.
+        textMcp.setText(mcp
+                ? "MCP :" + (bound > 0 ? bound : Prefs.port(this))
+                : getString(R.string.mcp_offline));
         textMcp.setTextColor(Ui.color(this, mcp ? R.color.text_secondary : R.color.text_muted));
         Ui.dot(dotMcp, mcp ? R.color.accent : R.color.idle);
     }
