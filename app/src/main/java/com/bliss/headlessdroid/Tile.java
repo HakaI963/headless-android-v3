@@ -35,6 +35,8 @@ public final class Tile {
     public volatile long lastFrameAt;    // uptime millis of the last frame
     public volatile boolean recording;
     public volatile long createdUptime;
+    /** When this slot was last captured, so the engine can pace itself. */
+    public volatile long lastPollAt;
 
     public Tile(int slot, String pkg, String label, int width, int height, int dpi) {
         this.slot = slot;

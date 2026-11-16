@@ -38,6 +38,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 public final class Engine {
     private static final String TAG = "HeadlessDroid";
     private static final int TICK_MS = 45;
+    private static final long MIN_FRAME_MS = 70;
 
     private static volatile Engine instance;
 
@@ -211,21 +212,24 @@ public final class Engine {
                 if (stack == null || !stack.alive()) {
                     continue;
                 }
-                Bitmap frame = stack.poll(0);
-                if (tile.frames != stack.frameCount()) {
-                    tile.frames = stack.frameCount();
-                    tile.lastFrameAt = stack.lastFrameAt();
-                    if (Tile.STARTING.equals(tile.state) && tile.frames > 0) {
-                        tile.state = Tile.LIVE;
+                // One capture every MIN_FRAME_MS per slot. A display renders far
+                // faster than a preview is useful, and each capture copies the
+                // whole frame; pacing here is what keeps nine apps affordable.
+                if (now - tile.lastPollAt >= MIN_FRAME_MS) {
+                    tile.lastPollAt = now;
+                    Bitmap frame = stack.poll(0);
+                    if (tile.frames != stack.frameCount()) {
+                        tile.frames = stack.frameCount();
+                        tile.lastFrameAt = stack.lastFrameAt();
+                        if (Tile.STARTING.equals(tile.state) && tile.frames > 0) {
+                            tile.state = Tile.LIVE;
+                            Log.i(TAG, "slot " + slot + " live: " + tile.pkg);
+                        }
                         dirty = true;
-                        Log.i(TAG, "slot " + slot + " live: " + tile.pkg);
                     }
-                    if (!Tile.ERROR.equals(tile.state)) {
-                        dirty = true;
+                    if (Tile.LIVE.equals(tile.state) && tile.recording) {
+                        Recorder.feed(slot, frame);
                     }
-                }
-                if (Tile.LIVE.equals(tile.state) && tile.recording) {
-                    Recorder.feed(slot, frame);
                 }
             }
             if (dirty) {
