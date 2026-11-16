@@ -43,6 +43,14 @@ final class AppsSheet {
 
         final Adapter adapter = new Adapter(engine.apps());
         list.setAdapter(adapter);
+        // The installed-app list is built off the UI thread; refresh the sheet
+        // when it lands instead of showing an empty grid of apps.
+        final Runnable reload = () -> {
+            adapter.replace(engine.apps());
+            adapter.filter(String.valueOf(search.getText()));
+        };
+        engine.addListener(reload);
+        dialog.setOnDismissListener(d -> engine.removeListener(reload));
         search.addTextChangedListener(new TextWatcher() {
             @Override
             public void beforeTextChanged(CharSequence s, int a, int b, int c) {
@@ -84,6 +92,11 @@ final class AppsSheet {
         Adapter(List<Engine.AppEntry> entries) {
             this.all = new ArrayList<>(entries);
             this.shown = new ArrayList<>(entries);
+        }
+
+        void replace(List<Engine.AppEntry> entries) {
+            all.clear();
+            all.addAll(entries);
         }
 
         void filter(String query) {

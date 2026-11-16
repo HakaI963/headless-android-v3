@@ -44,7 +44,11 @@ final class Network {
     }
 
     /** Best-effort scan of the device's own interfaces for an IPv4 address. */
-    static String anyAddress() {
+    static String anyAddress(Context context) {
+        String wifi = host(context);
+        if (!wifi.equals(loopback()) && !wifi.isEmpty()) {
+            return wifi;
+        }
         try {
             Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
             while (interfaces != null && interfaces.hasMoreElements()) {

@@ -51,6 +51,11 @@ public final class MainActivity extends Activity implements GridView.Listener {
 
     private final Runnable engineChanged = this::refreshAll;
     private int selectedSlot = -1;
+    private String gridSignature = "";
+    private int gridColumns = -1;
+    private boolean gridShowAdd;
+    private int actionBarSlot = Integer.MIN_VALUE;
+    private String actionBarSignature = "";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -110,7 +115,37 @@ public final class MainActivity extends Activity implements GridView.Listener {
     private void refreshAll() {
         refreshStatus();
         syncTiles();
-        rebuildGrid();
+        checkGrid();
+    }
+
+    /**
+     * Rebuilds the grid only when the set of running apps, the column count or
+     * the selection changes. Frame updates arrive many times a second, and
+     * rebuilding nine live tiles that often would spend the whole frame budget
+     * inflating views instead of drawing them.
+     */
+    private void checkGrid() {
+        int used = engine.count();
+        empty.setVisibility(used == 0 ? View.VISIBLE : View.GONE);
+        grid.setVisibility(used == 0 ? View.GONE : View.VISIBLE);
+
+        StringBuilder signature = new StringBuilder(48);
+        for (Tile tile : engine.tiles()) {
+            signature.append(tile.slot).append(':').append(tile.pkg).append('|');
+        }
+        int columns = engine.columns();
+        boolean showAdd = used < Droid.MAX_SLOTS;
+        if (!signature.toString().equals(gridSignature)
+                || columns != gridColumns
+                || showAdd != gridShowAdd) {
+            grid.setColumns(columns);
+            grid.setShowAdd(showAdd);
+            grid.rebuild(engine.tiles(), selectedSlot);
+            gridSignature = signature.toString();
+            gridColumns = columns;
+            gridShowAdd = showAdd;
+        }
+        refreshActions();
     }
 
     private void syncTiles() {
@@ -144,12 +179,23 @@ public final class MainActivity extends Activity implements GridView.Listener {
     }
 
     private void refreshActions() {
-        actions.removeAllViews();
         Tile tile = selectedSlot > 0 ? engine.tile(selectedSlot) : null;
-        actionsScroll.setVisibility(tile == null ? View.GONE : View.VISIBLE);
         if (tile == null) {
+            actionBarSlot = Integer.MIN_VALUE;
+            actionBarSignature = "";
+            actionsScroll.setVisibility(View.GONE);
             return;
         }
+        // Only rebuild the chips when the slot or its recording state changed.
+        String signature = tile.slot + ":" + tile.recording + ":" + tile.state;
+        if (tile.slot == actionBarSlot && signature.equals(actionBarSignature)) {
+            return;
+        }
+        actionBarSlot = tile.slot;
+        actionBarSignature = signature;
+
+        actions.removeAllViews();
+        actionsScroll.setVisibility(View.VISIBLE);
         addAction(R.drawable.ic_back, R.string.action_back,
                 v -> key(android.view.KeyEvent.KEYCODE_BACK));
         addAction(R.drawable.ic_home, R.string.action_home,
@@ -251,14 +297,23 @@ public final class MainActivity extends Activity implements GridView.Listener {
     }
 
     private void record() {
-        Tile tile = engine.tile(selectedSlot);
+        final Tile tile = engine.tile(selectedSlot);
         if (tile == null) {
             return;
         }
         if (tile.recording) {
-            String path = Recorder.stop(tile.slot);
+            // Stopping drains the encoder, which can take seconds, so it never
+            // runs on the UI thread.
+            final int slot = tile.slot;
+            final String label = tile.label;
             tile.recording = false;
-            toast(path == null ? "Recording failed" : "Saved " + path);
+            new Thread(() -> {
+                final String path = Recorder.stop(slot);
+                runOnUiThread(() -> {
+                    toast(path == null ? "Recording failed" : "Saved " + path);
+                    refreshAll();
+                });
+            }, "droid-stop-rec-" + slot).start();
         } else {
             tile.recording = Recorder.start(tile.slot, tile.width, tile.height, 12);
             toast(tile.recording ? "Recording " + tile.label : "Recording failed to start");

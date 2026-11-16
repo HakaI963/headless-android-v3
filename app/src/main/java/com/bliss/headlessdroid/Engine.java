@@ -385,7 +385,19 @@ public final class Engine {
         return launch(pkg, -1, true);
     }
 
+    /**
+     * Adds one app to the grid.
+     *
+     * <p>An app that is already on the grid is relaunched in its own slot rather
+     * than given a second display: one phone, one instance per slot, and the
+     * task the app is already running in.
+     */
     public Tile launch(String pkg, int slot, boolean forceStop) {
+        Tile existing = tileForPkg(pkg);
+        if (existing != null && slot < 1) {
+            restart(existing.slot);
+            return existing;
+        }
         AppEntry entry = entryFor(pkg);
         if (entry == null) {
             Log.w(TAG, "not launchable: " + pkg);
@@ -444,6 +456,16 @@ public final class Engine {
                 tile.state = Tile.ERROR;
                 tile.error = error;
                 Log.w(TAG, "slot " + tile.slot + " launch failed: " + error);
+                final DisplayStack failed = stack;
+                worker.post(() -> {
+                    tile.stack = null;
+                    try {
+                        if (failed != null) {
+                            failed.release();
+                        }
+                    } catch (Throwable ignored) {
+                    }
+                });
             }
         } catch (Throwable e) {
             tile.state = Tile.ERROR;
@@ -835,6 +857,15 @@ public final class Engine {
 
     public boolean shellReady() {
         return Shell.get(context).ready();
+    }
+
+    public long uptimeMs() {
+        return SystemClock.uptimeMillis() - startedAt;
+    }
+
+    /** Fires listeners from any thread, for operations that changed state. */
+    public void refreshAll() {
+        worker.post(this::pingListeners);
     }
 
     public String shellState() {

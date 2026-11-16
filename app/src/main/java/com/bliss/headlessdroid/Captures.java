@@ -83,33 +83,85 @@ final class Captures {
         }
     }
 
-    /** Moves a finished local file into Downloads and deletes the copy. */
+    /**
+     * Moves a finished local file into Downloads and deletes the copy.
+     *
+     * <p>Copied in chunks, not read into one array: a recording can outgrow a
+     * byte[], and the moov atom lives at the end of an MP4, so a truncated copy
+     * would produce a file that no player can open.
+     */
     static String publish(Context context, String folder, String name, File file) {
         if (file == null || !file.isFile() || file.length() <= 0) {
             return null;
         }
-        byte[] data;
-        try (FileInputStream in = new FileInputStream(file)) {
-            byte[] buffer = new byte[(int) Math.min(file.length(), 64 * 1024 * 1024)];
-            int offset = 0;
-            while (offset < buffer.length) {
-                int read = in.read(buffer, offset, buffer.length - offset);
-                if (read < 0) {
-                    break;
+        long total = file.length();
+        if (Build.VERSION.SDK_INT >= 29) {
+            Uri target = null;
+            try {
+                ContentValues values = new ContentValues();
+                values.put(MediaStore.MediaColumns.DISPLAY_NAME, name);
+                values.put(MediaStore.MediaColumns.MIME_TYPE, mime(name));
+                values.put(MediaStore.MediaColumns.RELATIVE_PATH, folder);
+                target = context.getContentResolver()
+                        .insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
+                if (target == null) {
+                    return null;
                 }
-                offset += read;
+                try (FileInputStream in = new FileInputStream(file);
+                     OutputStream out = context.getContentResolver().openOutputStream(target)) {
+                    if (out == null) {
+                        return null;
+                    }
+                    copy(in, out, total);
+                }
+                try {
+                    file.delete();
+                } catch (Throwable ignored) {
+                }
+                return name;
+            } catch (Throwable e) {
+                Log.w(Droid.TAG, "media store write failed: " + e);
+                if (target != null) {
+                    try {
+                        context.getContentResolver().delete(target, null, null);
+                    } catch (Throwable ignored) {
+                    }
+                }
+                return null;
             }
-            data = offset == buffer.length ? buffer : java.util.Arrays.copyOf(buffer, offset);
-        } catch (Throwable e) {
-            Log.w(Droid.TAG, "read recording failed: " + e);
+        }
+        File directory = new File(Environment.getExternalStorageDirectory(), folder);
+        if (!directory.exists() && !directory.mkdirs() && !directory.isDirectory()) {
             return null;
         }
-        String published = publish(context, folder, name, data);
-        try {
-            file.delete();
-        } catch (Throwable ignored) {
+        File destination = new File(directory, name);
+        try (FileInputStream in = new FileInputStream(file);
+             FileOutputStream out = new FileOutputStream(destination)) {
+            copy(in, out, total);
+            try {
+                file.delete();
+            } catch (Throwable ignored) {
+            }
+            return name;
+        } catch (Throwable e) {
+            Log.w(Droid.TAG, "legacy write failed: " + e);
+            return null;
         }
-        return published;
+    }
+
+    private static void copy(FileInputStream in, OutputStream out, long total)
+            throws java.io.IOException {
+        byte[] buffer = new byte[256 * 1024];
+        long written = 0;
+        int read;
+        while ((read = in.read(buffer)) > 0) {
+            out.write(buffer, 0, read);
+            written += read;
+            if (written > total) {
+                throw new java.io.IOException("source changed while copying");
+            }
+        }
+        out.flush();
     }
 
     static String mime(String name) {
@@ -121,6 +173,70 @@ final class Captures {
         }
         return "image/jpeg";
     }
+
+    /**
+     * Reads a published capture back, by file name and folder.
+     *
+     * <p>Used by the endpoint's {@code /files/<kind>/<name>} route, so a client
+     * can pull the same bytes that were written to Downloads.
+     */
+    static byte[] read(Context context, String folder, String name) {
+        if (name == null || name.isEmpty()) {
+            return null;
+        }
+        if (Build.VERSION.SDK_INT >= 29) {
+            try (android.database.Cursor cursor = context.getContentResolver().query(
+                    MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                    new String[]{MediaStore.MediaColumns._ID},
+                    MediaStore.MediaColumns.DISPLAY_NAME + " = ? AND "
+                            + MediaStore.MediaColumns.RELATIVE_PATH + " LIKE ?",
+                    new String[]{name, folder + "%"}, null)) {
+                if (cursor != null && cursor.moveToFirst()) {
+                    long id = cursor.getLong(0);
+                    Uri uri = Uri.withAppendedPath(MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                            String.valueOf(id));
+                    try (java.io.InputStream in = context.getContentResolver()
+                            .openInputStream(uri)) {
+                        if (in == null) {
+                            return null;
+                        }
+                        return readAll(in);
+                    }
+                }
+            } catch (Throwable e) {
+                Log.w(Droid.TAG, "read capture failed: " + e);
+            }
+            return null;
+        }
+        File directory = new File(Environment.getExternalStorageDirectory(), folder);
+        if (!directory.isDirectory()) {
+            return null;
+        }
+        File file = new File(directory, name);
+        if (!file.isFile()) {
+            return null;
+        }
+        try (java.io.InputStream in = new FileInputStream(file)) {
+            return readAll(in);
+        } catch (Throwable e) {
+            return null;
+        }
+    }
+
+    private static byte[] readAll(java.io.InputStream in) throws java.io.IOException {
+        java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+        byte[] buffer = new byte[128 * 1024];
+        int read;
+        while ((read = in.read(buffer)) > 0) {
+            out.write(buffer, 0, read);
+            if (out.size() > MAX_CAPTURE_BYTES) {
+                throw new java.io.IOException("capture is too large to serve");
+            }
+        }
+        return out.toByteArray();
+    }
+
+    private static final int MAX_CAPTURE_BYTES = 96 * 1024 * 1024;
 
     /** Lists what has been written so an AI client can list and pull files. */
     static List<Entry> list(Context context, String folder) {
