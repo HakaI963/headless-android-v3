@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Headless Droid</string>
+
+    <!-- Headless Droid: runs real phone apps on hidden virtual displays. -->
+    <string name="grid_title">Grid</string>
+    <string name="grid_subtitle">Slots</string>
+    <string name="grid_empty">Nothing running. Add an app to the grid.</string>
+
+    <string name="action_add">Add app</string>
+    <string name="action_apps">Apps</string>
+    <string name="action_settings">Settings</string>
+    <string name="action_close">Close</string>
+    <string name="action_restart">Relaunch</string>
+    <string name="action_shot">Shot</string>
+    <string name="action_record">Record</string>
+    <string name="action_stop">Stop</string>
+    <string name="action_input">Input</string>
+    <string name="action_back">Back</string>
+    <string name="action_home">Home</string>
+    <string name="action_recents">Recents</string>
+    <string name="action_type">Type</string>
+
+    <string name="state_idle">Idle</string>
+    <string name="state_starting">Starting</string>
+    <string name="state_live">Live</string>
+    <string name="state_stopped">Stopped</string>
+    <string name="state_error">Error</string>
+    <string name="state_loading">Loading</string>
+
+    <string name="mcp_title">MCP endpoint</string>
+    <string name="mcp_offline">Offline</string>
+    <string name="mcp_online">Listening</string>
+    <string name="mcp_connecting">Starting</string>
+
+    <string name="shell_title">Privileged service</string>
+    <string name="shell_ready">Ready</string>
+    <string name="shell_missing">Shizuku required</string>
+    <string name="shell_grant">Grant</string>
+
+    <string name="settings_title">Settings</string>
+    <string name="settings_mcp">MCP endpoint</string>
+    <string name="settings_mcp_port">Port</string>
+    <string name="settings_mcp_token">Access token</string>
+    <string name="settings_mcp_regen">New token</string>
+    <string name="settings_mcp_regen_hint">Shown once. Clients send it as the X-Droid-Token header.</string>
+    <string name="settings_grid">Grid</string>
+    <string name="settings_columns">Columns</string>
+    <string name="settings_resolution">Screen size per app</string>
+    <string name="settings_wake">Keep the display awake</string>
+    <string name="settings_wake_hint">HyperOS sleeps virtual displays with the phone screen.</string>
+    <string name="settings_about">About</string>
+    <string name="settings_version">Version</string>
+</resources>

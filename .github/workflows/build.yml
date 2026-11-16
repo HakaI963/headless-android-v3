@@ -1,0 +1,55 @@
+# Builds the debug APK exactly the way scripts/build-apk.sh does on the phone,
+# so the artifact in the release is the one this repository can build anywhere.
+name: Build APK
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # The script wants ANDROID_HOME/platforms/android-36 and
+      # ANDROID_HOME/build-tools/35.0.0; build them from the same repositories
+      # the on-device build uses.
+      - name: Install SDK
+        run: |
+          mkdir -p "$HOME/android-sdk" "$GITHUB_WORKSPACE/sdk"
+          curl -fsSL -o cmdtools.zip \
+            "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip"
+          unzip -q cmdtools.zip -d "$HOME/android-sdk/tmp"
+          mkdir -p "$HOME/android-sdk/cmdline-tools"
+          mv "$HOME/android-sdk/tmp/cmdline-tools" "$HOME/android-sdk/cmdline-tools/latest"
+          yes | "$HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager" \
+            --sdk_root="$HOME/android-sdk" --licenses > /dev/null || true
+          "$HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager" \
+            --sdk_root="$HOME/android-sdk" \
+            "platforms;android-36" "build-tools;35.0.0"
+
+      - name: Build
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/sdk/platforms" "$GITHUB_WORKSPACE/sdk/build-tools"
+          ln -s "$HOME/android-sdk/platforms/android-36" \
+            "$GITHUB_WORKSPACE/sdk/platforms/android-36"
+          ln -s "$HOME/android-sdk/build-tools/35.0.0" \
+            "$GITHUB_WORKSPACE/sdk/build-tools/35.0.0"
+          ANDROID_HOME="$GITHUB_WORKSPACE/sdk" JAVA_HOME="$JAVA_HOME" \
+            ./scripts/build-apk.sh
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: headless-droid-debug
+          path: build/local/headless-droid-debug.apk
+          if-no-files-found: error
