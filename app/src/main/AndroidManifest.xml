@@ -68,7 +68,7 @@
         </service>
 
         <!-- Shizuku user service: runs in its own process with shell identity,
-             which is what allows `am start --display` and input injection. -->
+             which is what starts an app on a display and injects input. -->
         <service
             android:name=".ShellService"
             android:process=":shell"

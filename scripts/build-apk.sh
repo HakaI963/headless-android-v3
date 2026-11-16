@@ -84,6 +84,25 @@ JAVA="$JAVA_HOME/bin/java"
 JAVAC="$JAVA_HOME/bin/javac"
 KEYTOOL="$JAVA_HOME/bin/keytool"
 
+# The Android build tools are x86-64 binaries. On an arm64 host (this app is
+# developed on a phone) they run through qemu-user, which needs an amd64 runtime
+# to load them:
+#   mkdir -p /tmp/x86root && dpkg-deb -x libc6_*_amd64.deb /tmp/x86root
+#   # plus libgcc-s1 and the loader's own libs; see README
+# Set SYSROOT to where that runtime lives, or leave it empty on an x86-64 host.
+SYSROOT="${SYSROOT:-}"
+case "$(uname -m)" in
+    x86_64 | amd64) native() { "$@"; } ;;
+    *) native() {
+        if [ -x /usr/bin/qemu-x86_64 ] && [ -n "$SYSROOT" ] && [ -d "$SYSROOT" ]; then
+            QEMU_LD_PREFIX="$SYSROOT" qemu-x86_64 -L "$SYSROOT" "$@"
+        else
+            echo "cannot run $1: arm64 host needs qemu-user-static plus an amd64 sysroot" >&2
+            return 127
+        fi
+    } ;;
+esac
+
 rm -rf "$BUILD"
 mkdir -p "$JARS" "$GEN" "$CLASSES" "$DEX"
 
@@ -114,18 +133,26 @@ fi
 
 # --- resources --------------------------------------------------------------
 echo "== aapt2 compile"
-"$BUILD_TOOLS/aapt2" compile --dir "$APP/src/main/res" -o "$BUILD/res.zip"
+native "$BUILD_TOOLS/aapt2" compile --dir "$APP/src/main/res" -o "$BUILD/res.zip"
 
 # aapt2 requires a package attribute; AGP 9 forbids it in the source manifest,
 # so inject it into a build-time copy only.
 sed '0,/<manifest /s//<manifest package="com.bliss.headlessdroid" /' \
     "$APP/src/main/AndroidManifest.xml" > "$BUILD/AndroidManifest.xml"
 
+# aapt2 wants an asset directory that exists; an empty one is fine when the app
+# has no assets.
+mkdir -p "$BUILD/assets"
+ASSETS="$APP/src/main/assets"
+if [ ! -d "$ASSETS" ]; then
+    ASSETS="$BUILD/assets"
+fi
+
 echo "== aapt2 link"
-"$BUILD_TOOLS/aapt2" link \
+native "$BUILD_TOOLS/aapt2" link \
     -o "$BUILD/app-unsigned.apk" \
     -I "$ANDROID_JAR" \
-    -A "$APP/src/main/assets" \
+    -A "$ASSETS" \
     --manifest "$BUILD/AndroidManifest.xml" \
     --java "$GEN" \
     --custom-package com.bliss.headlessdroid \
@@ -167,7 +194,7 @@ echo "== package"
 cp "$BUILD/app-unsigned.apk" "$BUILD/app-dexed.apk"
 (cd "$DEX" && "$JAVA_HOME/bin/jar" uf "$BUILD/app-dexed.apk" classes.dex)
 
-"$BUILD_TOOLS/zipalign" -f 4 "$BUILD/app-dexed.apk" "$BUILD/app-aligned.apk"
+native "$BUILD_TOOLS/zipalign" -f 4 "$BUILD/app-dexed.apk" "$BUILD/app-aligned.apk"
 
 KEYSTORE="$BUILD/debug.keystore"
 if [ ! -f "$KEYSTORE" ]; then
@@ -190,5 +217,5 @@ sed -n '1,5p' "$BUILD/verify.txt"
 
 echo
 echo "APK:  $BUILD/headless-droid-debug.apk"
-"$BUILD_TOOLS/aapt2" dump badging "$BUILD/headless-droid-debug.apk" > "$BUILD/badging.txt"
+native "$BUILD_TOOLS/aapt2" dump badging "$BUILD/headless-droid-debug.apk" > "$BUILD/badging.txt"
 sed -n '1,6p' "$BUILD/badging.txt"
