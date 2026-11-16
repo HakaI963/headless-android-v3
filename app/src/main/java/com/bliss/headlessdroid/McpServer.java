@@ -6,6 +6,7 @@ import android.util.Log;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Locale;
 
@@ -93,8 +94,13 @@ public final class McpServer {
     // ------------------------------------------------------------------- routes
 
     private static void routes(HttpServer server, Engine engine) {
-        server.route("GET", "/", (request, response) ->
-                response.text(statusPage()));
+        server.route("GET", "/", (request, response) -> {
+            // A status page, in the same palette as the app: dark neutral
+            // background, quiet text, one amber link. No JavaScript.
+            String page = statusPage();
+            response.contentType = "text/html; charset=utf-8";
+            response.body = page.getBytes(StandardCharsets.UTF_8);
+        });
         server.route("GET", "/mcp/health", (request, response) ->
                 response.json(health()));
         server.route("POST", "/mcp", (request, response) -> handleMcp(request, response));
@@ -107,11 +113,29 @@ public final class McpServer {
             }
             response.stream = true;
             response.contentType = "text/event-stream";
-            response.extra.put("Cache-Control", "no-cache");
+            response.header("Cache-Control", "no-cache");
+            // The spec asks a server to echo the session id it was given.
+            String session = request.header("mcp-session-id");
+            if (!session.isEmpty()) {
+                response.header("Mcp-Session-Id", session);
+            }
         });
         server.route("GET", "/shot/<slot>.jpg", (request, response) -> {
             int slot = number(request.routeParam("slot", "0"), 0);
-            byte[] jpeg = slot > 0 ? engine.jpeg(slot, 85, 1500) : null;
+            if (slot < 1) {
+                response.status = 400;
+                response.json("{\"error\":\"slot must be 1-9\"}");
+                return;
+            }
+            double scale = clampNumber(number(request.param("scale", ""), -1), 0.1d, 1d, 1d);
+            Bitmap frame = slot > 0 ? engine.frameBlocking(slot, 1500) : null;
+            byte[] jpeg = frame == null ? null
+                    : Engine.encode(scale >= 1 ? frame
+                            : scale(frame, scale), Bitmap.CompressFormat.JPEG, 85);
+            if (frame != null && !frame.isRecycled() && scale < 1) {
+                // Only the scaled copy is ours to recycle.
+                frame.recycle();
+            }
             if (jpeg == null) {
                 response.status = 404;
                 response.json("{\"error\":\"no frame for slot " + slot + "\"}");
@@ -120,6 +144,7 @@ public final class McpServer {
             response.bytes(jpeg, "image/jpeg");
         });
         server.route("GET", "/shot/grid.jpg", (request, response) -> {
+            double scale = clampNumber(number(request.param("scale", ""), -1), 0.1d, 1d, 1d);
             Bitmap composite = engine.gridComposite(0);
             byte[] jpeg = Engine.encode(composite, Bitmap.CompressFormat.JPEG, 80);
             if (composite != null && !composite.isRecycled()) {
@@ -134,7 +159,12 @@ public final class McpServer {
         });
         server.route("GET", "/files/<kind>/<name>", (request, response) -> {
             String kind = request.routeParam("kind", "shots");
-            String folder = "videos".equals(kind) ? Droid.DIR_VIDEOS : Droid.DIR_SHOTS;
+            String folder = folderOf(kind);
+            if (folder == null) {
+                response.status = 400;
+                response.json("{\"error\":\"kind must be shots or videos\"}");
+                return;
+            }
             String name = request.routeParam("name", "");
             byte[] data = Captures.read(engine.context(), folder, name);
             if (data == null) {
@@ -173,6 +203,7 @@ public final class McpServer {
         Object id = idOf(message);
         boolean notification = id == null;
         String method = message.optString("method", "");
+        String clientVersion = message.optString("protocolVersion", PROTOCOL_VERSION);
         JSONObject params = message.optJSONObject("params");
         if (params == null) {
             params = new JSONObject();
@@ -183,9 +214,7 @@ public final class McpServer {
             response.json(error(id, -32600, "missing method"));
             return;
         }
-        if ("initialize".equals(method) || "ping".equals(method)) {
-            // No token needed to start the handshake.
-        } else if (!authorized(request)) {
+        if (!authorized(request)) {
             if (notification) {
                 response.status = 202;
                 response.contentType = "application/json";
@@ -207,7 +236,7 @@ public final class McpServer {
 
         switch (method) {
             case "initialize":
-                response.json(reply(id, initialize()));
+                response.json(reply(id, initialize(clientVersion)));
                 return;
             case "ping":
                 response.json(reply(id, new JSONObject()));
@@ -216,7 +245,13 @@ public final class McpServer {
                 response.json(reply(id, tools()));
                 return;
             case "tools/call":
-                response.json(reply(id, tool(params, request)));
+                try {
+                    response.json(reply(id, tool(params, request)));
+                } catch (IllegalArgumentException e) {
+                    // An unknown tool or bad arguments is -32602 in the
+                    // JSON-RPC body, with the HTTP status left at 200.
+                    response.json(error(id, -32602, String.valueOf(e.getMessage())));
+                }
                 return;
             case "resources/list":
                 response.json(reply(id, resources()));
@@ -227,8 +262,13 @@ public final class McpServer {
             case "prompts/list":
                 response.json(reply(id, prompts()));
                 return;
+            case "prompts/get":
+                response.json(reply(id, prompt(params)));
+                return;
             default:
-                response.status = 404;
+                // A protocol error travels inside the JSON-RPC body; the HTTP
+                // status stays 200, because clients raise on non-2xx and never
+                // read the error this reply carries.
                 response.json(error(id, -32601, "unknown method " + method));
         }
     }
@@ -250,34 +290,48 @@ public final class McpServer {
     }
 
     private static String statusPage() {
-        StringBuilder out = new StringBuilder(512);
-        out.append("Headless Droid\n");
-        out.append("================\n");
+        StringBuilder slots = new StringBuilder(128);
+        int used = 0;
+        String shell = "unknown";
+        String base = endpoint();
         try {
             JSONObject status = new JSONObject(engine.statusJson());
-            int used = status.optInt("used", 0);
-            int max = status.optInt("max", 9);
-            out.append("apps running : ").append(used).append('/').append(max).append('\n');
-            out.append("shell        : ").append(status.optString("shell")).append('\n');
-            out.append("endpoint     : ").append(endpoint()).append("/mcp\n");
-            out.append("token        : send it as X-Droid-Token\n");
-            JSONArray slots = status.optJSONArray("slots");
-            if (slots != null) {
-                for (int i = 0; i < slots.length(); i++) {
-                    JSONObject tile = slots.optJSONObject(i);
+            used = status.optInt("used", 0);
+            shell = status.optString("shell", "unknown");
+            JSONArray list = status.optJSONArray("slots");
+            if (list != null) {
+                for (int i = 0; i < list.length(); i++) {
+                    JSONObject tile = list.optJSONObject(i);
                     if (tile == null) {
                         continue;
                     }
-                    out.append(String.format(Locale.US, "  slot %d  %-16s %-8s %s\n",
-                            tile.optInt("slot"), tile.optString("label"),
-                            tile.optString("state"), tile.optString("package")));
+                    slots.append("<tr><td>").append(tile.optInt("slot"))
+                            .append("</td><td>")
+                            .append(HttpServer.jsonEscape(tile.optString("label")))
+                            .append("</td><td>").append(tile.optString("state"))
+                            .append("</td><td>")
+                            .append(HttpServer.jsonEscape(tile.optString("package")))
+                            .append("</td></tr>");
                 }
             }
-        } catch (Throwable e) {
-            out.append("status unavailable\n");
+        } catch (Throwable ignored) {
         }
-        out.append("\nPOST a JSON-RPC message to /mcp; a frame is /shot/<slot>.jpg\n");
-        return out.toString();
+        String target = base == null ? "not listening" : base + "/mcp";
+        return "<!doctype html><meta charset=utf-8><title>Headless Droid</title>"
+                + "<style>body{background:#121417;color:#E6E9EC;"
+                + "font:15px/1.6 monospace;margin:24px;max-width:44rem}"
+                + "h1{font-size:20px;font-weight:400;margin:0 0 4px}"
+                + "a{color:#E0A458}table{border-collapse:collapse;margin-top:16px}"
+                + "td{padding:4px 12px 4px 0;color:#A0A8B0;border-top:1px solid #2A2F35}"
+                + "td:first-child{color:#E6E9EC}</style>"
+                + "<h1>Headless Droid</h1>"
+                + "<p>An MCP endpoint for nine Android apps on virtual displays.</p>"
+                + "<p>An MCP client should use <a>" + target + "</a></p>"
+                + "<p>An MCP client should send the token as <b>X-Droid-Token</b>.</p>"
+                + "<p>An MCP client is one of &nbsp;" + used + "&nbsp; apps running, "
+                + "shell " + HttpServer.jsonEscape(shell) + ".</p>"
+                + (slots.length() == 0 ? "" : "<table>" + slots + "</table>")
+                + "<p>A frame is available at /shot/1.jpg, the composite at /shot/grid.jpg.</p>";
     }
 
     private static String tileState(int slot) {
@@ -291,73 +345,17 @@ public final class McpServer {
 
     // ------------------------------------------------------------------- jsonrpc
 
-    private static String dispatch(HttpServer.Request request) {
-        try {
-            JSONObject message = new JSONObject(request.bodyText());
-            String jsonrpc = message.optString("jsonrpc", "");
-            if (!"2.0".equals(jsonrpc)) {
-                return error(idOf(message), -32600, "expected jsonrpc 2.0");
-            }
-            Object id = message.opt("id");
-            boolean notification = message.isNull("id");
-            String method = message.optString("method", "");
-            JSONObject params = message.optJSONObject("params");
-            if (params == null) {
-                params = new JSONObject();
-            }
-
-            if (method.isEmpty()) {
-                return error(id, -32600, "missing method");
-            }
-            if ("notifications/initialized".equals(method) || "initialized".equals(method)) {
-                return "";
-            }
-            if (!toolsFree(method)) {
-                if (!authorized(request)) {
-                    if (notification) {
-                        return "";
-                    }
-                    return unauthorized(id);
-                }
-            }
-
-            switch (method) {
-                case "initialize":
-                    return reply(id, initialize());
-                case "ping":
-                    return reply(id, new JSONObject());
-                case "tools/list":
-                    return reply(id, tools());
-                case "tools/call":
-                    return reply(id, tool(params, request));
-                case "resources/list":
-                    return reply(id, resources());
-                case "resources/read":
-                    return reply(id, resource(params));
-                case "prompts/list":
-                    return reply(id, prompts());
-                default:
-                    return error(id, -32601, "unknown method " + method);
-            }
-        } catch (Throwable e) {
-            Log.w(TAG, "dispatch failed: " + e);
-            return error(null, -32700, "parse error: " + e);
-        }
-    }
-
-    private static boolean toolsFree(String method) {
-        return "initialize".equals(method) || "ping".equals(method);
-    }
-
     private static Object idOf(JSONObject message) {
         return message.has("id") && !message.isNull("id") ? message.opt("id") : null;
     }
 
     private static boolean authorized(HttpServer.Request request) {
         String configured = token;
+        // A missing token closes the endpoint rather than opening it: this
+        // server drives real apps, so "no token configured" must not read as
+        // "everyone is welcome".
         if (configured == null || configured.isEmpty()) {
-            // No token configured: the endpoint is open by explicit choice.
-            return true;
+            return false;
         }
         String header = request.header("x-droid-token");
         if (!header.isEmpty() && configured.equals(header.trim())) {
@@ -409,7 +407,7 @@ public final class McpServer {
         }
     }
 
-    private static JSONObject initialize() throws Exception {
+    private static JSONObject initialize(String clientVersion) throws Exception {
         JSONObject capabilities = new JSONObject();
         capabilities.put("tools", new JSONObject().put("listChanged", false));
         capabilities.put("resources", new JSONObject().put("listChanged", false));
@@ -417,8 +415,12 @@ public final class McpServer {
         JSONObject info = new JSONObject();
         info.put("name", "Headless Droid");
         info.put("version", "1.0.0");
+        String negotiated = clientVersion == null || clientVersion.trim().isEmpty()
+                ? PROTOCOL_VERSION : clientVersion.trim();
         return new JSONObject()
-                .put("protocolVersion", PROTOCOL_VERSION)
+                // Echo the version the client asked for; a newer revision is
+                // answered with the same string rather than a hard downgrade.
+                .put("protocolVersion", negotiated)
                 .put("capabilities", capabilities)
                 .put("serverInfo", info)
                 .put("instructions", instructions());
@@ -605,12 +607,22 @@ public final class McpServer {
                     if (packageName.isEmpty()) {
                         return errorResult("launch_app needs a package name");
                     }
-                    Tile tile = engine.launch(packageName,
-                            arguments.optInt("slot", 0), false);
+                    Tile tile = engine.launch(packageName, arguments.optInt("slot", 0), true);
                     if (tile == null) {
                         return errorResult("cannot launch " + packageName
                                 + ": " + (engine.freeSlots() <= 0
                                 ? "the grid is full (9 apps)" : "not launchable"));
+                    }
+                    // The display id is assigned on the engine's worker thread,
+                    // so a client that needs it immediately waits for it here.
+                    long deadline = System.currentTimeMillis() + 3000;
+                    while (tile.displayId < 0 && System.currentTimeMillis() < deadline) {
+                        try {
+                            Thread.sleep(50);
+                        } catch (InterruptedException ignored) {
+                            Thread.currentThread().interrupt();
+                            break;
+                        }
                     }
                     JSONObject out = new JSONObject();
                     out.put("slot", tile.slot);
@@ -620,16 +632,24 @@ public final class McpServer {
                     out.put("width", tile.width);
                     out.put("height", tile.height);
                     return textResult("launched " + tile.label + " in slot " + tile.slot
-                            + " on display " + tile.displayId + "\n" + out.toString(2));
+                            + " on display " + tile.displayId + "\n" + out.toString());
                 }
                 case "close_app": {
                     if (arguments.has("package")) {
-                        engine.close(arguments.optString("package", ""));
-                        return textResult("{\"closed\":\"" + arguments.optString("package") + "\"}");
+                        String packageName = arguments.optString("package", "");
+                        Tile running = engine.tileForPkg(packageName);
+                        if (running == null) {
+                            return errorResult(packageName + " is not on the grid");
+                        }
+                        engine.close(running.slot);
+                        return textResult("closed slot " + running.slot + " ("
+                                + packageName + ")");
                     }
-                    boolean closed = engine.close(arguments.optInt("slot", 0));
-                    return closed ? textResult("closed slot " + arguments.optInt("slot", 0))
-                            : errorResult("slot " + arguments.optInt("slot", 0) + " is not running");
+                    int slot = arguments.optInt("slot", 0);
+                    boolean closed = engine.close(slot);
+                    return closed
+                            ? textResult("closed slot " + slot)
+                            : errorResult("slot " + slot + " is not running");
                 }
                 case "close_all":
                     engine.closeAll();
@@ -655,6 +675,13 @@ public final class McpServer {
                 case "key": {
                     int slot = arguments.optInt("slot", 0);
                     int code = keyCode(arguments.optString("key", ""));
+                    if (code < 0) {
+                        return errorResult("unknown key \""
+                                + arguments.optString("key", "")
+                                + "\": use back, home, recents, enter, tab, delete,"
+                                + " space, power, menu, search, volume_up, volume_down"
+                                + " or a numeric keycode");
+                    }
                     return engine.key(slot, code) ? textResult("sent key to slot " + slot)
                             : errorResult("input needs the shell service");
                 }
@@ -686,8 +713,11 @@ public final class McpServer {
                     return textResult(out.toString(2));
                 }
                 default:
-                    return errorResult("unknown tool " + name);
+                    throw new IllegalArgumentException("unknown tool " + name);
             }
+        } catch (IllegalArgumentException e) {
+            // Invalid parameters are a protocol error, not a tool failure.
+            throw e;
         } catch (Throwable e) {
             Log.w(TAG, "tool " + name + " failed: " + e);
             return errorResult("tool " + name + " failed: " + e);
@@ -755,7 +785,11 @@ public final class McpServer {
     }
 
     private static int keyCode(String key) {
-        switch (key.toLowerCase(Locale.US)) {
+        String name = key == null ? "" : key.trim().toLowerCase(Locale.US);
+        if (name.isEmpty()) {
+            return -1;
+        }
+        switch (name) {
             case "back":
                 return android.view.KeyEvent.KEYCODE_BACK;
             case "home":
@@ -786,7 +820,9 @@ public final class McpServer {
                 try {
                     return Integer.parseInt(key.trim());
                 } catch (Throwable e) {
-                    return android.view.KeyEvent.KEYCODE_BACK;
+                    // A typo must not silently become Back and navigate the
+                    // app away; the caller gets "unknown key" instead.
+                    return -1;
                 }
         }
     }
@@ -825,12 +861,12 @@ public final class McpServer {
                 frame = source;
                 shared = true;
             } else {
-                frame = Bitmap.createScaledBitmap(source,
-                        Math.max(1, (int) Math.round(source.getWidth() * scale)),
-                        Math.max(1, (int) Math.round(source.getHeight() * scale)), true);
+                frame = scale(source, scale);
                 shared = false;
             }
         }
+        int width = frame == null ? 0 : frame.getWidth();
+        int height = frame == null ? 0 : frame.getHeight();
         byte[] data = Engine.encode(frame,
                 png ? Bitmap.CompressFormat.PNG : Bitmap.CompressFormat.JPEG,
                 png ? 100 : 88);
@@ -847,10 +883,11 @@ public final class McpServer {
             String name = Captures.publish(engine.context(), Droid.DIR_SHOTS,
                     Captures.fileName(stem, png ? ".png" : ".jpg"), data);
             if (name != null) {
-                return textResult("saved " + name + "\n" + payload(label, data));
+                return textResult("saved " + name + "\n"
+                        + payload(label, data, width, height));
             }
         }
-        return textResult(payload(label, data));
+        return textResult(payload(label, data, width, height));
     }
 
     private static double clampNumber(double value, double min, double max, double fallback) {
@@ -860,10 +897,33 @@ public final class McpServer {
         return Math.max(min, Math.min(max, value));
     }
 
-    private static String payload(String label, byte[] data) {
+    /** A scaled copy of a frame, for a lighter screenshot. */
+    private static Bitmap scale(Bitmap source, double scale) {
+        if (source == null || scale >= 1) {
+            return source;
+        }
+        return Bitmap.createScaledBitmap(source,
+                Math.max(1, (int) Math.round(source.getWidth() * scale)),
+                Math.max(1, (int) Math.round(source.getHeight() * scale)), true);
+    }
+
+    /** The Downloads folder for a kind, or null when the kind is unknown. */
+    private static String folderOf(String kind) {
+        if ("videos".equals(kind)) {
+            return Droid.DIR_VIDEOS;
+        }
+        if ("shots".equals(kind)) {
+            return Droid.DIR_SHOTS;
+        }
+        return null;
+    }
+
+    private static String payload(String label, byte[] data, int width, int height) {
         StringBuilder out = new StringBuilder(128 + data.length * 2);
         out.append("{\"label\":\"").append(HttpServer.jsonEscape(label))
                 .append("\",\"bytes\":").append(data.length)
+                .append(",\"width\":").append(width)
+                .append(",\"height\":").append(height)
                 .append(",\"data\":\"data:image/");
         out.append(data.length > 0 && (data[0] == (byte) 0x89) ? "png" : "jpeg");
         out.append(";base64,");
@@ -1046,12 +1106,12 @@ public final class McpServer {
 
     private static final String[][] PROMPTS = {
             {"inspect_grid", "Look at every app on the grid and say what is running",
-            "Report what each running app is showing, one line per slot."},
+            "Report what each running app is showing, one line per slot.", ""},
             {"drive_app", "Open an app, wait for it to render and act on it",
-            "Launch the app, wait_for_change, take a screenshot, then do what the user"
-            + " asked."},
+            "Launch the app, wait_for_change, take a screenshot, then do what was asked.",
+            "app"},
             {"check_grid_health", "Report whether the grid and the shell service are healthy",
-            "Call app_status and grid_status and answer in two sentences."},
+            "Call app_status and grid_status and answer in two sentences.", ""},
     };
 
     private static JSONObject prompts() throws Exception {
@@ -1060,25 +1120,35 @@ public final class McpServer {
             JSONObject object = new JSONObject();
             object.put("name", prompt[0]);
             object.put("description", prompt[1]);
-            JSONArray arguments = new JSONArray();
-            JSONObject argument = new JSONObject();
-            argument.put("name", "app");
-            argument.put("description", "Optional app package or a task to do");
-            argument.put("required", false);
-            arguments.put(argument);
-            object.put("arguments", arguments);
-            JSONArray messages = new JSONArray();
+            if (!prompt[3].isEmpty()) {
+                JSONObject argument = new JSONObject();
+                argument.put("name", prompt[3]);
+                argument.put("description", "The package or the task to work on");
+                argument.put("required", false);
+                object.put("arguments", new JSONArray().put(argument));
+            }
+            list.put(object);
+        }
+        return new JSONObject().put("prompts", list);
+    }
+
+    private static JSONObject prompt(JSONObject params) throws Exception {
+        String name = params.optString("name", "");
+        for (String[] prompt : PROMPTS) {
+            if (!prompt[0].equals(name)) {
+                continue;
+            }
             JSONObject message = new JSONObject();
             message.put("role", "user");
             JSONObject content = new JSONObject();
             content.put("type", "text");
             content.put("text", prompt[2]);
             message.put("content", content);
-            messages.put(message);
-            object.put("messages", messages);
-            list.put(object);
+            return new JSONObject()
+                    .put("description", prompt[1])
+                    .put("messages", new JSONArray().put(message));
         }
-        return new JSONObject().put("prompts", list);
+        throw new IllegalArgumentException("unknown prompt " + name);
     }
 
     // ------------------------------------------------------------------- helpers

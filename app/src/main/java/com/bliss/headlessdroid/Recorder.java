@@ -6,10 +6,12 @@ import android.media.MediaCodec;
 import android.media.MediaCodecInfo;
 import android.media.MediaFormat;
 import android.media.MediaMuxer;
+import android.os.Environment;
 import android.util.Log;
 
 import java.io.File;
 import java.nio.ByteBuffer;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -17,23 +19,29 @@ import java.util.concurrent.locks.ReentrantLock;
  * Records what a slot renders into an MP4.
  *
  * <p>Nine slots can record at once, so each recording owns its codec, its muxer
- * and one daemon thread; nothing is shared between them. Frames arrive from the
- * engine's capture loop as RGBA bitmaps, are converted to the colour layout the
- * encoder reports, and are queued at a paced presentation time so a slow capture
- * still yields a correctly timed file instead of a fast-forward one.
+ * and one daemon thread; nothing is shared between them. {@link #feed} only
+ * hands a frame to that thread — all codec work, the colour conversion and the
+ * teardown happen there, so the engine's capture loop is never blocked by an
+ * encoder and no buffer index can be leaked by a caller that gives up.
  *
  * <p>This is a screen capture, not a camera: 10 to 15 frames per second per slot
  * is the honest number, and more slots means fewer frames each.
  */
 public final class Recorder {
-    private static final String TAG = "HeadlessDroid.Rec";
+    private static final String TAG = "HeadlessDroid";
     private static final String MIME = "video/avc";
-    private static final long DRAIN_TIMEOUT_MS = 4000;
     private static final long JOIN_SLICE_MS = 400;
+    private static final long DRAIN_TIMEOUT_MS = 6000;
+    private static final int MAX_PENDING = 3;
+    /** H.264 profile numbers from the specification, used as KEY_PROFILE values. */
+    private static final int AVC_PROFILE_BASELINE = 1;
+    private static final int AVC_PROFILE_MAIN = 4;
+    private static final int AVC_PROFILE_HIGH = 8;
 
     private static final ReentrantLock lock = new ReentrantLock();
     private static final Recording[] slots = new Recording[Droid.MAX_SLOTS + 1];
     private static final AtomicInteger failures = new AtomicInteger();
+    private static volatile String startError = "";
 
     private Recorder() {
     }
@@ -41,33 +49,42 @@ public final class Recorder {
     /** Starts recording one slot. Returns true when the encoder came up. */
     public static boolean start(int slot, int width, int height, int fps) {
         if (slot < 1 || slot > Droid.MAX_SLOTS) {
+            startError = "slot must be 1-9";
             return false;
         }
-        int safeWidth = Math.max(64, Math.min(width, 1920));
-        int safeHeight = Math.max(64, Math.min(height, 1920));
+        // Validated, not clamped: a frame that does not match the encoder is
+        // dropped, so a silently repaired size would lose every frame.
+        if (width < 64 || height < 64 || width > 1920 || height > 1920) {
+            startError = "unsupported size " + width + "x" + height;
+            return false;
+        }
         int safeFps = Math.max(1, Math.min(fps, 30));
-
+        Recording recording;
+        try {
+            recording = new Recording(slot, width, height, safeFps);
+        } catch (Throwable e) {
+            startError = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
+            Log.w(TAG, "recorder start failed for slot " + slot + ": " + startError);
+            return false;
+        }
         lock.lock();
         try {
             if (slots[slot] != null) {
-                return false;
-            }
-            Recording recording = new Recording(slot, safeWidth, safeHeight, safeFps);
-            if (!recording.ready()) {
-                recording.tearDown();
+                // Nothing external: the thread owns its own teardown.
+                recording.teardownQuietly();
                 return false;
             }
             slots[slot] = recording;
-            recording.begin();
-            Log.i(TAG, "slot " + slot + " recording " + safeWidth + "x" + safeHeight
-                    + " @" + safeFps + "fps -> " + recording.file);
-            return true;
-        } catch (Throwable e) {
-            Log.w(TAG, "start " + slot + " failed: " + e);
-            return false;
         } finally {
             lock.unlock();
         }
+        recording.begin();
+        return true;
+    }
+
+    /** Why the last start() failed, for the UI and the MCP tool. */
+    public static String lastError() {
+        return startError;
     }
 
     public static boolean recording(int slot) {
@@ -84,11 +101,11 @@ public final class Recorder {
     }
 
     /**
-     * Queues a frame if enough time has passed since the last one.
+     * Hands a frame to the recording thread.
      *
-     * <p>Called from the engine's single worker thread. It copies the bitmap's
-     * pixels once and hands the codec work to the recording thread, so the
-     * capture loop is never blocked by an encoder.
+     * <p>Called from the engine's capture worker, so it does nothing expensive:
+     * a frame is offered to a bounded queue and dropped when the thread is
+     * behind, which is what a screen capture should do.
      */
     public static void feed(int slot, Bitmap frame) {
         if (frame == null || frame.isRecycled() || slot < 1 || slot > Droid.MAX_SLOTS) {
@@ -110,7 +127,7 @@ public final class Recorder {
     /**
      * Finishes a recording and returns the absolute path of the MP4: in
      * Downloads when MediaStore accepted it, otherwise in the app's cache.
-     * Returns null when there was nothing usable.
+     * Returns null when nothing usable was produced.
      */
     public static String stop(int slot) {
         if (slot < 1 || slot > Droid.MAX_SLOTS) {
@@ -127,10 +144,7 @@ public final class Recorder {
         if (recording == null) {
             return null;
         }
-        String published = recording.finish();
-        recording.tearDown();
-        Log.i(TAG, "slot " + slot + " stopped -> " + published);
-        return published;
+        return recording.finish();
     }
 
     /** Drops a recording without publishing anything. */
@@ -150,38 +164,40 @@ public final class Recorder {
             return;
         }
         recording.abandon();
-        recording.tearDown();
         Log.i(TAG, "slot " + slot + " recording aborted");
     }
 
-    /** One slot's recording: a codec, a muxer and the thread that drains them. */
+    /** One slot's recording: a codec, a muxer and the thread that owns both. */
     private static final class Recording implements Runnable {
         final int slot;
         final int width;
         final int height;
         final int fps;
-        final File file;
         final String label;
+        final File file;
 
         private final MediaCodec codec;
         private final MediaMuxer muxer;
         private final boolean planar;
-        private final boolean flexible;
-        private final boolean interleavedChroma;
+        private final boolean interleaved;
+        private final boolean flex;
         private final boolean vFirst;
         private final int bitrate;
         private final byte[] yuv;
         private final int[] pixels;
+        private final ArrayBlockingQueue<Bitmap> pending =
+                new ArrayBlockingQueue<>(MAX_PENDING);
+        private final long intervalNs;
+        private final Object stopLock = new Object();
 
         private Thread thread;
         private volatile boolean draining;
+        private volatile boolean stopping;
         private volatile boolean failed;
-        private volatile boolean eosQueued;
-        private volatile boolean muxerRunning;
+        private volatile long baseNanos;
+        private volatile long lastQueuedNanos;
         private int trackIndex = -1;
-        private long lastQueuedAt;
-        private final long intervalNs;
-        private final Object stopLock = new Object();
+        private boolean muxerRunning;
 
         Recording(int slot, int width, int height, int fps) throws Exception {
             this.slot = slot;
@@ -189,7 +205,7 @@ public final class Recorder {
             this.height = height;
             this.fps = fps;
             this.intervalNs = 1_000_000_000L / fps;
-            this.bitrate = width >= 720 ? 6_000_000 : width >= 540 ? 3_000_000 : 2_500_000;
+            this.bitrate = width >= 720 ? 6_000_000 : 2_500_000;
             this.label = "slot" + slot;
 
             File directory = new File(App.context().getCacheDir(), "records");
@@ -206,7 +222,7 @@ public final class Recorder {
             }
             this.codec = encoder;
 
-            // Colour layout: use a concrete 4:2:0 format when the encoder reports
+            // Colour layout: a concrete 4:2:0 format whenever the encoder reports
             // one, because the byte order is then defined. Only when it reports
             // nothing but Flexible do the Image planes have to be filled, which
             // is the documented path for COLOR_FormatYUV420Flexible.
@@ -230,18 +246,19 @@ public final class Recorder {
             } catch (Throwable e) {
                 Log.w(TAG, "colour format probe failed: " + e);
             }
-            this.planar = planarFound && !flexFound;
-            this.flexible = flexFound && !planarFound && !semiFound;
-            this.interleavedChroma = !planar && !flexible;
+            this.planar = planarFound;
+            this.interleaved = !planarFound && (semiFound || flexFound
+                    || !(planarFound || semiFound || flexFound));
+            this.flex = flexFound && !planarFound && !semiFound;
             // Semi-planar byte order is vendor specific; AOSP's flexible plane
             // order is Cb then Cr, so the interleaved pair is written Cb-first.
             this.vFirst = false;
 
             MediaFormat format = MediaFormat.createVideoFormat(MIME, width, height);
-            if (flexible) {
+            if (flex) {
                 // Deliberately not set: Flexible selects its own layout and the
                 // Image API reports the planes.
-            } else if (planar) {
+            } else if (planarFound) {
                 format.setInteger(MediaFormat.KEY_COLOR_FORMAT,
                         MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Planar);
             } else {
@@ -250,47 +267,137 @@ public final class Recorder {
             }
             format.setInteger(MediaFormat.KEY_BIT_RATE, bitrate);
             format.setInteger(MediaFormat.KEY_FRAME_RATE, fps);
-            format.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1);
-            encoder.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
+            format.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, fps < 8 ? 2 : 1);
+            // Baseline keeps the file playable everywhere; some encoders refuse it, and
+            // the fallback below leaves the profile to the encoder's default.
+            // The profile numbers are the H.264 specification's: 1 is Baseline,
+            // 4 is Main, 8 is High. The constants left the public SDK, so they
+            // are written out with their values.
+            try {
+                format.setInteger(MediaFormat.KEY_PROFILE, AVC_PROFILE_BASELINE);
+                encoder.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
+            } catch (Throwable e) {
+                Log.w(TAG, "slot " + slot + " rejected baseline, retrying: " + e);
+                format.setInteger(MediaFormat.KEY_PROFILE, AVC_PROFILE_MAIN);
+                encoder.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
+            }
             encoder.start();
-
             this.muxer = new MediaMuxer(file.getAbsolutePath(),
                     MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
             this.yuv = new byte[width * height * 3 / 2];
             this.pixels = new int[width * height];
         }
 
-        boolean ready() {
-            return codec != null && muxer != null && file.getParentFile() != null;
+        /** True only when the encoder reports nothing but Flexible. */
+        private boolean flexOnly() {
+            return flex;
         }
 
-        void begin() {
+        private void begin() {
             draining = true;
-            thread = new Thread(this, TAG + "-slot" + slot);
+            thread = new Thread(this, TAG + "-rec-" + slot);
             thread.setDaemon(true);
             thread.start();
         }
 
         void offer(Bitmap bitmap) {
-            if (failed || eosQueued || thread == null || bitmap.isRecycled()) {
+            if (failed || stopping || thread == null || bitmap.isRecycled()) {
                 return;
             }
             long now = System.nanoTime();
-            if (lastQueuedAt != 0 && now - lastQueuedAt < intervalNs) {
+            if (lastQueuedNanos != 0 && now - lastQueuedNanos < intervalNs) {
                 return;
             }
-            if (bitmap.getWidth() != width || bitmap.getHeight() != height) {
-                // The engine resized the slot preset mid-recording; a frame of
-                // the wrong size cannot be fed to this encoder.
+            if (baseNanos == 0) {
+                // The first frame anchors the timeline at zero, so the file's
+                // duration and the seek bar mean something in a player.
+                baseNanos = now;
+            }
+            if (!pending.offer(bitmap)) {
+                // The recording thread is behind; dropping is correct here.
                 return;
             }
+            lastQueuedNanos = now;
+        }
+
+        @Override
+        public void run() {
+            MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
+            try {
+                while (draining) {
+                    Bitmap frame = pending.poll();
+                    if (frame != null) {
+                        supply(frame, System.nanoTime());
+                    }
+                    int index = codec.dequeueOutputBuffer(info, 20_000);
+                    if (index == MediaCodec.INFO_TRY_AGAIN_LATER) {
+                        continue;
+                    }
+                    if (index == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
+                        startMuxer(codec.getOutputFormat());
+                        continue;
+                    }
+                    if (index < 0) {
+                        continue;
+                    }
+                    boolean coded = (info.flags & MediaCodec.BUFFER_FLAG_CODEC_CONFIG) != 0;
+                    if (info.size > 0 && !coded && trackIndex >= 0) {
+                        ByteBuffer buffer = codec.getOutputBuffer(index);
+                        if (buffer != null) {
+                            buffer.position(info.offset);
+                            buffer.limit(info.offset + info.size);
+                            muxer.writeSampleData(trackIndex, buffer, info);
+                        }
+                    }
+                    codec.releaseOutputBuffer(index, false);
+                    if ((info.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
+                        draining = false;
+                        break;
+                    }
+                }
+            } catch (Throwable e) {
+                fail("recording loop failed: " + e);
+            } finally {
+                // The thread owns its own teardown: no other thread touches the
+                // codec or the muxer after this point.
+                selfTeardown();
+            }
+        }
+
+        /** Converts and queues one frame. Runs on the recording thread only. */
+        private void supply(Bitmap bitmap, long now) {
+            if (bitmap.isRecycled()
+                    || bitmap.getWidth() != width || bitmap.getHeight() != height) {
+                return;
+            }
+            long pts = Math.max(0, (now - baseNanos) / 1000);
             try {
                 bitmap.getPixels(pixels, 0, width, 0, 0, width, height);
                 convert();
-                lastQueuedAt = now;
-                queue(now);
+                int index = codec.dequeueInputBuffer(10_000);
+                if (index < 0) {
+                    return;
+                }
+                if (flexOnly()) {
+                    Image image = codec.getInputImage(index);
+                    if (image == null) {
+                        Log.w(TAG, "slot " + slot + " encoder gave no input image");
+                        codec.queueInputBuffer(index, 0, 0, pts,
+                                MediaCodec.BUFFER_FLAG_END_OF_STREAM);
+                        return;
+                    }
+                    fillPlanes(index, image, pts);
+                } else {
+                    ByteBuffer input = codec.getInputBuffer(index);
+                    if (input == null) {
+                        return;
+                    }
+                    input.clear();
+                    input.put(yuv);
+                    codec.queueInputBuffer(index, 0, yuv.length, pts, 0);
+                }
             } catch (Throwable e) {
-                fail("frame conversion failed: " + e);
+                fail("frame could not be queued: " + e);
             }
         }
 
@@ -305,10 +412,9 @@ public final class Recorder {
             int yIndex = 0;
             int uIndex = total;
             int vIndex = total + chroma;
-            if (interleavedChroma) {
+            if (interleaved) {
                 uIndex = vIndex = total;
             }
-
             for (int row = 0; row < height; row++) {
                 int rowStart = row * width;
                 int nextRow = rowStart + width;
@@ -335,7 +441,7 @@ public final class Recorder {
                                 + (pixels[belowRight] & 0xff)) >> 2;
                         int u = chromaU(r, g, b);
                         int v = chromaV(r, g, b);
-                        if (interleavedChroma) {
+                        if (interleaved) {
                             yuv[uIndex++] = (byte) (vFirst ? v : u);
                             yuv[uIndex++] = (byte) (vFirst ? u : v);
                         } else {
@@ -367,44 +473,21 @@ public final class Recorder {
             return value < 0 ? 0 : Math.min(value, 255);
         }
 
-        private void queue(long timestamp) {
-            try {
-                int index = codec.dequeueInputBuffer(10_000);
-                if (index < 0) {
-                    return;
-                }
-                long pts = timestamp / 1000;
-                if (flexible) {
-                    Image image = codec.getInputImage(index);
-                    if (image == null) {
-                        Log.w(TAG, "slot " + slot + " encoder gave no input image");
-                        return;
-                    }
-                    fillPlanes(index, image, pts);
-                } else {
-                    ByteBuffer input = codec.getInputBuffer(index);
-                    if (input == null) {
-                        return;
-                    }
-                    input.clear();
-                    input.put(yuv);
-                    codec.queueInputBuffer(index, 0, yuv.length, pts, 0);
-                }
-            } catch (Throwable e) {
-                fail("queue failed: " + e);
-            }
-        }
-
         /**
          * Writes the packed YUV420 buffer into the planes the codec declares.
-         * Handles both packed chroma (pixelStride 1) and the interleaved pair
-         * (pixelStride 2), which is the layout some vendors report.
+         *
+         * <p>Both vendor layouts are handled: three separate planes, and the
+         * two-plane sub-image where U and V share one plane and interleave at
+         * {@code pixelStride 2}. The buffer index is always returned to the
+         * codec, including on the error paths, so it can never be leaked.
          */
         private void fillPlanes(int index, Image image, long pts) {
             android.media.Image.Plane[] planes = image.getPlanes();
-            if (planes == null || planes.length < 3) {
-                Log.w(TAG, "slot " + slot + " encoder reported " + (planes == null
-                        ? 0 : planes.length) + " planes");
+            if (planes == null || planes.length < 2) {
+                Log.w(TAG, "slot " + slot + " encoder reported "
+                        + (planes == null ? 0 : planes.length) + " planes");
+                codec.queueInputBuffer(index, 0, 0, pts, 0);
+                image.close();
                 return;
             }
             int total = width * height;
@@ -412,12 +495,13 @@ public final class Recorder {
             int chromaWidth = width / 2;
             int chromaHeight = height / 2;
 
-            ByteBuffer yPlane = planes[0].getBuffer();
-            int yRowStride = planes[0].getRowStride();
-            int yPixelStride = planes[0].getPixelStride();
-            if (yPlane == null || yRowStride < width || yPixelStride != 1) {
-                Log.w(TAG, "slot " + slot + " unusable luma plane "
-                        + yRowStride + "/" + yPixelStride);
+            android.media.Image.Plane lumaPlane = planes[0];
+            ByteBuffer yPlane = lumaPlane.getBuffer();
+            int yRowStride = lumaPlane.getRowStride();
+            if (yPlane == null || yRowStride < width || lumaPlane.getPixelStride() != 1) {
+                Log.w(TAG, "slot " + slot + " unusable luma plane");
+                codec.queueInputBuffer(index, 0, 0, pts, 0);
+                image.close();
                 return;
             }
             for (int row = 0; row < height; row++) {
@@ -425,87 +509,66 @@ public final class Recorder {
                 yPlane.put(yuv, row * width, width);
             }
 
-            ByteBuffer cPlane = planes[1].getBuffer();
-            ByteBuffer uOrV = planes[2].getBuffer();
-            int rowStride = planes[1].getRowStride();
-            int pixelStride = planes[1].getPixelStride();
-            int secondRowStride = planes[2].getRowStride();
-            int secondPixelStride = planes[2].getPixelStride();
-            if (cPlane == null || uOrV == null || pixelStride != 1
-                    || secondPixelStride != 1 || rowStride < chromaWidth
-                    || secondRowStride < chromaWidth) {
-                Log.w(TAG, "slot " + slot + " unusable chroma planes "
-                        + pixelStride + "/" + secondPixelStride);
+            android.media.Image.Plane first = planes[1];
+            ByteBuffer firstBuffer = first.getBuffer();
+            int firstRow = first.getRowStride();
+            int firstPixel = first.getPixelStride();
+            android.media.Image.Plane second = planes.length >= 3 ? planes[2] : null;
+            ByteBuffer secondBuffer = second == null ? null : second.getBuffer();
+
+            boolean twoPlane = second == null || secondBuffer == null
+                    || firstBuffer == secondBuffer;
+            boolean interleave = twoPlane && firstPixel == 2;
+            if (firstBuffer == null || (twoPlane && !interleave)) {
+                Log.w(TAG, "slot " + slot + " unusable chroma planes");
+                codec.queueInputBuffer(index, 0, 0, pts, 0);
+                image.close();
                 return;
             }
             int uBase = total;
             int vBase = total + chroma;
-            boolean uvShareBuffer = same(cPlane, uOrV, rowStride, secondRowStride);
-            for (int row = 0; row < chromaHeight; row++) {
-                int uOffset = row * rowStride;
-                int vOffset = row * secondRowStride;
-                for (int column = 0; column < chromaWidth; column++) {
-                    cPlane.put(uOffset + column, yuv[uBase]);
-                    if (uvShareBuffer) {
-                        // The two planes share one buffer, so the pair is written
-                        // interleaved even though both report stride 1.
-                        uOrV.put(uOffset + column * 2 + 1, yuv[vBase]);
-                    } else {
-                        uOrV.put(vOffset + column, yuv[vBase]);
+            if (interleave) {
+                // Two planes, U and V interleaved at a pixel stride of 2: the
+                // pair for each chroma pixel lives at column * 2.
+                for (int row = 0; row < chromaHeight; row++) {
+                    int offset = row * firstRow;
+                    for (int column = 0; column < chromaWidth; column++) {
+                        int position = offset + column * firstPixel;
+                        firstBuffer.put(position, yuv[uBase++]);
+                        firstBuffer.put(position + 1, yuv[vBase++]);
                     }
-                    uBase++;
-                    vBase++;
+                }
+            } else if (twoPlane) {
+                for (int row = 0; row < chromaHeight; row++) {
+                    int offset = row * firstRow;
+                    for (int column = 0; column < chromaWidth; column++) {
+                        firstBuffer.put(offset + column * firstPixel, yuv[uBase]);
+                        firstBuffer.put(offset + column * firstPixel
+                                + Math.max(1, firstPixel / 2), yuv[vBase]);
+                        uBase++;
+                        vBase++;
+                    }
+                }
+            } else {
+                int secondRow = second.getRowStride();
+                int secondPixel = second.getPixelStride();
+                if (secondRow < chromaWidth || secondPixel != 1) {
+                    Log.w(TAG, "slot " + slot + " unusable second chroma plane");
+                    codec.queueInputBuffer(index, 0, 0, pts, 0);
+                    image.close();
+                    return;
+                }
+                for (int row = 0; row < chromaHeight; row++) {
+                    int uOffset = row * firstRow;
+                    int vOffset = row * secondRow;
+                    for (int column = 0; column < chromaWidth; column++) {
+                        firstBuffer.put(uOffset + column, yuv[uBase++]);
+                        secondBuffer.put(vOffset + column, yuv[vBase++]);
+                    }
                 }
             }
-            // The size argument is ignored for Image based inputs; the index is
-            // what matters, and it must be the one from dequeueInputBuffer.
             codec.queueInputBuffer(index, 0, 0, pts, 0);
             image.close();
-        }
-
-        private static boolean same(ByteBuffer a, ByteBuffer b, int rowA, int rowB) {
-            return a != null && b != null && a == b && rowA == rowB;
-        }
-
-        @Override
-        public void run() {
-            MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
-            while (draining) {
-                try {
-                    int index = codec.dequeueOutputBuffer(info, 20_000);
-                    if (index == MediaCodec.INFO_TRY_AGAIN_LATER) {
-                        continue;
-                    }
-                    if (index == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
-                        startMuxer(codec.getOutputFormat());
-                        continue;
-                    }
-                    if (index < 0) {
-                        continue;
-                    }
-                    boolean coded = (info.flags & MediaCodec.BUFFER_FLAG_CODEC_CONFIG) != 0;
-                    boolean key = (info.flags & MediaCodec.BUFFER_FLAG_KEY_FRAME) != 0;
-                    if (info.size > 0 && !coded && trackIndex >= 0) {
-                        ByteBuffer buffer = codec.getOutputBuffer(index);
-                        if (buffer != null) {
-                            buffer.position(info.offset);
-                            buffer.limit(info.offset + info.size);
-                            muxer.writeSampleData(trackIndex, buffer, info);
-                        }
-                    } else if (info.size > 0 && !coded && !key) {
-                        Log.w(TAG, "slot " + slot + " dropped a frame before the muxer started");
-                    }
-                    codec.releaseOutputBuffer(index, false);
-                    if ((info.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
-                        draining = false;
-                        break;
-                    }
-                } catch (Throwable e) {
-                    fail("drain failed: " + e);
-                    draining = false;
-                    break;
-                }
-            }
         }
 
         private void startMuxer(MediaFormat format) {
@@ -522,82 +585,136 @@ public final class Recorder {
             }
         }
 
-        private synchronized void fail(String reason) {
-            if (failed) {
-                return;
-            }
-            failed = true;
-            draining = false;
-            failures.incrementAndGet();
-            Log.w(TAG, "slot " + slot + " recording failed: " + reason);
-        }
-
         /**
-         * Publishes the finished file. Every wait has a deadline because this
-         * runs on the engine's worker thread, which drives the whole grid.
+         * Signals the end of the stream and waits for the recording thread to
+         * finish and clean up after itself. Every wait has a deadline because
+         * this runs on the engine's worker or the UI thread.
          */
         String finish() {
             synchronized (stopLock) {
-                try {
-                    if (!failed) {
-                        eosQueued = true;
-                        int index = codec.dequeueInputBuffer(500_000);
-                        if (index >= 0) {
-                            if (flexible) {
-                                Image image = codec.getInputImage(index);
-                                if (image != null) {
-                                    image.close();
-                                }
-                            }
-                            codec.queueInputBuffer(index, 0, 0, System.nanoTime() / 1000,
-                                    MediaCodec.BUFFER_FLAG_END_OF_STREAM);
+                stopping = true;
+                long deadline = System.currentTimeMillis() + DRAIN_TIMEOUT_MS;
+                boolean signalled = false;
+                while (System.currentTimeMillis() < deadline) {
+                    try {
+                        int index = codec.dequeueInputBuffer(250_000);
+                        if (index < 0) {
+                            continue;
                         }
-                        Thread local = thread;
-                        if (local != null) {
-                            long spent = 0;
-                            while (local.isAlive() && spent < DRAIN_TIMEOUT_MS) {
-                                local.join(JOIN_SLICE_MS);
-                                spent += JOIN_SLICE_MS;
+                        if (flexOnly()) {
+                            Image image = codec.getInputImage(index);
+                            if (image != null) {
+                                image.close();
                             }
                         }
+                        // The end-of-stream timestamp belongs to the same timeline as the
+                        // frames, anchored on the first one, not to the wall clock.
+                        long tail = Math.max(0, (System.nanoTime() - baseNanos) / 1000) + 1000;
+                        codec.queueInputBuffer(index, 0, 0, tail,
+                                MediaCodec.BUFFER_FLAG_END_OF_STREAM);
+                        signalled = true;
+                        break;
+                    } catch (Throwable e) {
+                        Log.w(TAG, "slot " + slot + " end of stream failed: " + e);
+                        break;
                     }
-                } catch (Throwable e) {
-                    Log.w(TAG, "slot " + slot + " stop failed: " + e);
-                } finally {
+                }
+                if (!signalled) {
+                    Log.w(TAG, "slot " + slot + " could not signal the end of stream");
                     draining = false;
                     if (thread != null && thread.isAlive()) {
                         thread.interrupt();
                     }
-                    try {
-                        if (muxerRunning) {
-                            muxer.stop();
+                }
+                Thread local = thread;
+                if (local != null) {
+                    long spent = 0;
+                    while (local.isAlive() && spent < DRAIN_TIMEOUT_MS) {
+                        try {
+                            local.join(JOIN_SLICE_MS);
+                        } catch (InterruptedException ignored) {
+                            Thread.currentThread().interrupt();
+                            break;
                         }
-                    } catch (Throwable e) {
-                        Log.w(TAG, "slot " + slot + " muxer stop failed: " + e);
+                        spent += JOIN_SLICE_MS;
                     }
                 }
             }
             if (failed || file == null || file.length() <= 0) {
                 return null;
             }
-            String name = Captures.fileName(label + "-" + width + "x" + height, ".mp4");
-            String published = Captures.publish(App.context(), Droid.DIR_VIDEOS, name, file);
-            return published != null ? published : file.getAbsolutePath();
+            String name = Captures.fileName(stem(), ".mp4");
+            String result = Captures.publish(App.context(), Droid.DIR_VIDEOS, name, file);
+            if (result != null) {
+                // Captures publishes into Downloads, deletes the cache original
+                // on success and returns the display name; the caller is promised
+                // an absolute path, so it is rebuilt here.
+                File inDownloads = new File(Environment.getExternalStorageDirectory(),
+                        Droid.DIR_VIDEOS + "/" + name);
+                return inDownloads.getAbsolutePath();
+            }
+            // Publishing failed, so the cache copy stays and is what is
+            // returned. Nothing else deletes it.
+            Log.w(TAG, "slot " + slot + " published nothing, kept " + file);
+            return file.getAbsolutePath();
+        }
+
+        /** slot1-com.android.settings-540x720, safe for a file name. */
+        private String stem() {
+            String pkg = enginePackage();
+            if (pkg.isEmpty()) {
+                return label + "-" + width + "x" + height;
+            }
+            return label + "-" + pkg.replaceAll("[^A-Za-z0-9.]+", "-")
+                    + "-" + width + "x" + height;
+        }
+
+        private String enginePackage() {
+            Engine engine = Engine.get();
+            if (engine == null) {
+                return "";
+            }
+            Tile tile = engine.tile(slot);
+            return tile == null || tile.pkg == null ? "" : tile.pkg;
         }
 
         void abandon() {
             draining = false;
+            stopThreadNow();
+        }
+
+        void stopThreadNow() {
+            Thread local = thread;
+            if (local != null && local.isAlive()) {
+                local.interrupt();
+            }
+        }
+
+        void teardownQuietly() {
             try {
-                if (thread != null && thread.isAlive()) {
-                    thread.interrupt();
+                codec.stop();
+                codec.release();
+            } catch (Throwable ignored) {
+            }
+            try {
+                if (muxerRunning) {
+                    muxer.release();
                 }
             } catch (Throwable ignored) {
             }
         }
 
-        void tearDown() {
+        /** Runs on the recording thread's own finally: nothing else may touch
+         * the codec or the muxer after this. */
+        private void selfTeardown() {
             try {
                 codec.stop();
+            } catch (Throwable ignored) {
+            }
+            try {
+                if (muxerRunning) {
+                    muxer.stop();
+                }
             } catch (Throwable ignored) {
             }
             try {
@@ -610,12 +727,19 @@ public final class Recorder {
                 }
             } catch (Throwable ignored) {
             }
-            try {
-                if (file != null && file.isFile()) {
-                    file.delete();
-                }
-            } catch (Throwable ignored) {
+            // The file is deliberately left alone: only the caller that knows
+            // whether publishing succeeded may delete it, and it runs after this
+            // thread is joined.
+        }
+
+        private synchronized void fail(String reason) {
+            if (failed) {
+                return;
             }
+            failed = true;
+            draining = false;
+            failures.incrementAndGet();
+            Log.w(TAG, "slot " + slot + " recording failed: " + reason);
         }
     }
 }

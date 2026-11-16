@@ -44,7 +44,7 @@ final class HttpServer {
     private static final int MAX_HEADERS = 64;
     private static final int MAX_HEADER_LINE = 8 * 1024;
     private static final int SO_TIMEOUT_MS = 30_000;
-    private static final int MAX_CONNECTIONS = 16;
+    private static final int MAX_CONNECTIONS = 32;
 
     /** One request: method, path, query, headers, body. */
     static final class Request {
@@ -193,7 +193,8 @@ final class HttpServer {
         void handle(Request request, Response response) throws Exception;
     }
 
-    private final LinkedBlockingQueue<Runnable> queue = new LinkedBlockingQueue<>();
+    private final java.util.concurrent.ArrayBlockingQueue<Runnable> queue =
+            new java.util.concurrent.ArrayBlockingQueue<>(64);
     private final ThreadPoolExecutor executor = new ThreadPoolExecutor(
             8, MAX_CONNECTIONS, 30, TimeUnit.SECONDS, queue, new ThreadFactory() {
         private final AtomicInteger count = new AtomicInteger();
@@ -320,9 +321,6 @@ final class HttpServer {
                 if (request == null) {
                     return;
                 }
-                if (!expectContinue(request, out)) {
-                    return;
-                }
                 Response response = dispatch(request);
                 if (response.stream) {
                     stream(out, response);
@@ -349,15 +347,6 @@ final class HttpServer {
     }
 
     /** Answers 100-continue so a client waiting on it can send its body. */
-    private boolean expectContinue(Request request, OutputStream out) throws IOException {
-        if (!"100-continue".equalsIgnoreCase(request.header("expect"))) {
-            return true;
-        }
-        out.write("HTTP/1.1 100 Continue\r\n\r\n".getBytes(StandardCharsets.UTF_8));
-        out.flush();
-        return true;
-    }
-
     private Request readRequest(BufferedReader reader, OutputStream out) throws IOException {
         String line = reader.readLine();
         if (line == null || line.isEmpty()) {
@@ -410,6 +399,12 @@ final class HttpServer {
         if (tooLarge) {
             reject(out, 413, "body too large");
             return null;
+        }
+        // Answered before the body is read, because a client that waits for the
+        // 100 will not send anything until it arrives.
+        if ("100-continue".equalsIgnoreCase(headers.get("expect"))) {
+            out.write("HTTP/1.1 100 Continue\r\n\r\n".getBytes(StandardCharsets.UTF_8));
+            out.flush();
         }
         if (contentLength > 0) {
             int limit = Math.min(contentLength, MAX_BODY);
@@ -523,7 +518,6 @@ final class HttpServer {
         for (Map.Entry<String, String> entry : response.extra.entrySet()) {
             head.append(entry.getKey()).append(": ").append(entry.getValue()).append("\r\n");
         }
-        head.append("Cache-Control: no-cache\r\n");
         head.append("Transfer-Encoding: chunked\r\n");
         head.append("Date: ").append(DATE.get()).append("\r\n");
         head.append("Connection: close\r\n\r\n");
