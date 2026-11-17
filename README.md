@@ -127,36 +127,59 @@ Full protocol details are in [docs/MCP.md](docs/MCP.md).
 Two paths, same artifact:
 
 ```sh
-./gradlew assembleDebug                     # needs Gradle + AGP plugin download
+./gradlew assembleDebug
 
-JAVA_HOME=/usr/lib/jvm/java-17-openjdk \
+# or, on the phone itself (no Gradle distribution available there):
+JAVA_HOME=/usr/lib/jvm/java-17-openjdk-arm64 \
+KOTLIN_JAVA=/usr/lib/jvm/java-17-openjdk-arm64 \
+KOTLIN_LIB=/opt/kotlin-lib \
 ANDROID_JAR=/path/to/android-36/android.jar \
 BUILD_TOOLS=/path/to/build-tools/35.0.0 \
-./scripts/build-apk.sh                     # aapt2 -> javac -> d8 -> zipalign -> apksigner
+SYSROOT=/tmp/x86root \
+./scripts/build-apk.sh
 ```
 
-The script exists because the app was developed on the phone itself, where
-there is no Gradle distribution. It downloads the four Shizuku AARs from Maven
-and signs the APK with a throw-away debug key.
+The script runs aapt2 → javac → kotlinc → d8 → zipalign → apksigner. Three
+details that matter on the development device:
+
+- **Kotlin compiler jars.** `KOTLIN_LIB` must hold `kotlin-compiler-embeddable`,
+  `kotlin-daemon-embeddable`, `kotlin-stdlib`, `kotlin-script-runtime`,
+  `kotlinx-coroutines-core-jvm`, `trove4j` and `org.jetbrains:annotations` from
+  Maven Central, all the same version (2.0.21 is what d8 35 can read).
+- **qemu.** The Android build tools are x86-64 binaries, so on an arm64 host
+  they run under `qemu-user` with an amd64 runtime extracted into `SYSROOT`
+  (`libc6`, `libgcc-s1`, `libstdc++6`, `zlib1g` from archive.ubuntu.com).
+- **JDK.** javac uses `JAVA_HOME` (17+); kotlinc uses `KOTLIN_JAVA` (17–23,
+  because JDK 25 is too new for it).
+
+The script downloads the four Shizuku AARs from Maven and signs the APK with a
+throw-away debug key.
 
 ## Repository layout
 
+The app is Kotlin (application, activities and views); the engine, the shell
+bridge, the HTTP and MCP endpoint and the recorder are Java, so the two halves
+are compiled in one javac pass and one kotlinc pass.
+
 ```
 app/src/main/java/com/bliss/headlessdroid/
-  App.java                process split: UI process vs the shell process
-  Engine.java             the grid: slots, launches, input dispatch, frame pump
-  Tile.java               one slot = one running app
-  DisplayStack.java       a virtual display plus its ImageReader
-  GridView.java / TileView.java    the 3x3 grid and one cell
-  AppsSheet.java          the app picker
-  SettingsActivity.java   endpoint, columns, screen preset, wake lock
-  McpServer.java / HttpServer.java  the MCP endpoint and its HTTP server
-  Recorder.java           H.264 + MediaMuxer MP4 recording per slot
-  Captures.java           writes shots and videos to Downloads
-  Cmds.java / Inputs.java privileged work: am start, display-scoped input
-  Shell.java / ShellService.java   Shizuku user service and its client
-  Network.java            which address the endpoint advertises
-  Prefs.java, Ui.java, Droid.java
+  App.kt / .java                 process split: UI process vs the shell process
+  MainActivity.kt                the grid screen
+  SettingsActivity.kt            endpoint, columns, screen preset, wake lock
+  AppsSheet.kt                   the app picker
+  GridView.kt / TileView.kt      the 3x3 grid and one cell
+  Ui.kt                          the design tokens as view helpers
+  Engine.java                    the grid: slots, launches, input, frame pump
+  Tile.java                      one slot = one running app
+  DisplayStack.java              a virtual display plus its ImageReader
+  GridService.java               the foreground service that keeps the grid alive
+  McpServer.java / HttpServer.java   the MCP endpoint and its HTTP server
+  Recorder.java                  H.264 + MediaMuxer MP4 recording per slot
+  Captures.java                  writes shots and videos to Downloads
+  Cmds.java / Inputs.java         privileged work: am start, display-scoped input
+  Shell.java / ShellService.java  Shizuku user service and its client
+  Network.java                    which address the endpoint advertises
+  Prefs.java, Droid.java
 scripts/build-apk.sh
 docs/ARCHITECTURE.md      how the two processes and the grid fit together
 docs/MCP.md               the endpoint protocol

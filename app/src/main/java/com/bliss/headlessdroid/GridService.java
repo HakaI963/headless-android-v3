@@ -23,6 +23,7 @@ import android.util.Log;
 public class GridService extends Service {
     private static final String CHANNEL = "grid";
     private static final int NOTIFICATION_ID = 71;
+    private static final String ACTION_STOP_ALL = "com.bliss.headlessdroid.STOP_ALL";
 
     /** Starts the service when apps run, stops it when the grid is empty. */
     public static void sync(Context context) {
@@ -47,7 +48,7 @@ public class GridService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        if (intent != null && "com.bliss.headlessdroid.STOP_ALL".equals(intent.getAction())) {
+        if (intent != null && ACTION_STOP_ALL.equals(intent.getAction())) {
             Engine engine = Engine.get();
             if (engine != null) {
                 engine.closeAll();
@@ -60,10 +61,12 @@ public class GridService extends Service {
             stopSelf();
             return START_NOT_STICKY;
         }
+        Notification notification = build(this);
         if (Build.VERSION.SDK_INT >= 29) {
-            startForeground(NOTIFICATION_ID, build(this), ServiceInfo.FOREGROUND_SERVICE_TYPE_NONE);
+            startForeground(NOTIFICATION_ID, notification,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_NONE);
         } else {
-            startForeground(NOTIFICATION_ID, build(this));
+            startForeground(NOTIFICATION_ID, notification);
         }
         refresh();
         return START_STICKY;
@@ -74,19 +77,18 @@ public class GridService extends Service {
         return null;
     }
 
-    @Override
-    public void onDestroy() {
-        super.onDestroy();
-    }
-
-    static void refresh() {
-        NotificationManager manager = (NotificationManager) App.context()
+    private static void refresh() {
+        Context context = App.context();
+        if (context == null) {
+            return;
+        }
+        NotificationManager manager = (NotificationManager) context
                 .getSystemService(Context.NOTIFICATION_SERVICE);
         if (manager == null) {
             return;
         }
         try {
-            manager.notify(NOTIFICATION_ID, build(App.context()));
+            manager.notify(NOTIFICATION_ID, build(context));
         } catch (Throwable ignored) {
         }
     }
@@ -105,13 +107,16 @@ public class GridService extends Service {
         String line = running + (running == 1 ? " app on the grid" : " apps on the grid")
                 + (recording > 0 ? " · " + recording + " recording" : "");
 
-        Intent open = new Intent(context, MainActivity.class);
+        // Addressed by name, so this Java file never depends on the Kotlin UI.
+        Intent open = new Intent("android.intent.action.MAIN");
+        open.addCategory("android.intent.category.LAUNCHER");
+        open.setPackage(Droid.PKG);
         open.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
         PendingIntent openIntent = PendingIntent.getActivity(context, 0, open,
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
 
         Intent stopAll = new Intent(context, GridService.class);
-        stopAll.setAction("com.bliss.headlessdroid.STOP_ALL");
+        stopAll.setAction(ACTION_STOP_ALL);
         PendingIntent stopIntent = PendingIntent.getService(context, 1, stopAll,
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
 
