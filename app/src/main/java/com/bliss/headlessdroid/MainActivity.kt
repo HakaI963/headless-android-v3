@@ -10,6 +10,7 @@ import android.graphics.Bitmap
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.text.TextUtils
 import android.view.Gravity
 import android.view.View
@@ -59,7 +60,20 @@ class MainActivity : Activity(), GridView.Listener {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.main)
+        // This screen must not be able to kill the app: whatever is broken is
+        // shown here instead, so the failure is readable on the phone without a
+        // cable and without adb.
+        try {
+            setContentView(R.layout.main)
+            start()
+        } catch (error: Throwable) {
+            Log.w(TAG, "startup failed: $error")
+            showBroken(error)
+            return
+        }
+    }
+
+    private fun start() {
         engine = Engine.get() ?: Engine.start(this)
         engine.addListener(engineChanged)
 
@@ -104,6 +118,46 @@ class MainActivity : Activity(), GridView.Listener {
     override fun onDestroy() {
         super.onDestroy()
         engine.removeListener(engineChanged)
+    }
+
+    /** The screen of last resort: one column of text that says what broke. */
+    private fun showBroken(error: Throwable) {
+        val pad = Ui.dp(this, 16f)
+        val root = LinearLayout(this)
+        root.orientation = LinearLayout.VERTICAL
+        root.setBackgroundColor(Ui.color(this, R.color.bg))
+        root.setPadding(pad, pad, pad, pad)
+
+        val title = TextView(this)
+        title.text = "Headless Droid could not start"
+        title.textSize = 18f
+        title.setTextColor(Ui.color(this, R.color.text_primary))
+        root.addView(title)
+
+        val startup = App.startupError()
+        if (!startup.isNullOrBlank()) {
+            val engineLine = TextView(this)
+            engineLine.text = "engine: $startup"
+            engineLine.textSize = 13f
+            engineLine.setTextColor(Ui.color(this, R.color.danger))
+            root.addView(engineLine)
+        }
+
+        val detail = TextView(this)
+        detail.text = "screen: " + error.javaClass.simpleName + " - " + error.message
+        detail.textSize = 13f
+        detail.setTextColor(Ui.color(this, R.color.text_secondary))
+        detail.setTextIsSelectable(true)
+        root.addView(detail)
+
+        val where = TextView(this)
+        where.text = "The full stack trace is in Download/HeadlessDroid/crashes/"
+        where.textSize = 13f
+        where.setTextColor(Ui.color(this, R.color.text_muted))
+        where.typeface = android.graphics.Typeface.MONOSPACE
+        root.addView(where)
+
+        setContentView(root)
     }
 
     // ------------------------------------------------------------------ engine
@@ -418,6 +472,7 @@ class MainActivity : Activity(), GridView.Listener {
     }
 
     private companion object {
+        private const val TAG = "HeadlessDroid"
         const val TICK_MS = 60L
         const val NO_SLOT = -1
     }
