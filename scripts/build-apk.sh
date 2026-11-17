@@ -251,9 +251,14 @@ cp "$BUILD/app-unsigned.apk" "$BUILD/app-dexed.apk"
 
 native "$BUILD_TOOLS/zipalign" -f 4 "$BUILD/app-dexed.apk" "$BUILD/app-aligned.apk"
 
-KEYSTORE="$BUILD/debug.keystore"
+# The keystore deliberately lives outside build/, which is deleted between
+# builds: a fresh key each time produces an APK whose signature no longer
+# matches the installed app, so Android silently refuses the update and the
+# user keeps running the old build. Set KEYSTORE to keep it somewhere else.
+KEYSTORE="${KEYSTORE:-$ROOT/local/debug.keystore}"
+mkdir -p "$(dirname "$KEYSTORE")"
 if [ ! -f "$KEYSTORE" ]; then
-    echo "== generating debug keystore"
+    echo "== generating a stable debug keystore at $KEYSTORE"
     "$KEYTOOL" -genkeypair -keystore "$KEYSTORE" -storepass android -keypass android \
         -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 \
         -dname "CN=Android Debug,O=Android,C=US" >/dev/null 2>&1
