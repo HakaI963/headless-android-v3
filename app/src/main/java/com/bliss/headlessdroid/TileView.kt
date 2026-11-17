@@ -151,6 +151,11 @@ class TileView(context: Context) : View(context) {
     }
 
     private fun stateText(tile: Tile): String {
+        if (Tile.ERROR == tile.state) {
+            // A slot that could not start says why: a silent tile reads as
+            // "nothing happened", which is the worst possible feedback.
+            return if (tile.error.isNullOrBlank()) "error" else ellipsize(tile.error!!, width * 0.6f, meta)
+        }
         val idle = android.os.SystemClock.uptimeMillis() - tile.lastFrameAt
         if (tile.frames > 0 && idle < 3000) {
             return tile.frames.toString() + "f"
