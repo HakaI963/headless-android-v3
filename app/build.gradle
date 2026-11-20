@@ -4,11 +4,11 @@ plugins {
 }
 
 android {
-    namespace = "com.bliss.headlessdroid"
+    namespace = "com.bliss.headlessandroid"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.bliss.headlessdroid"
+        applicationId = "com.bliss.headlessandroid"
         minSdk = 29
         targetSdk = 36
         versionCode = 1

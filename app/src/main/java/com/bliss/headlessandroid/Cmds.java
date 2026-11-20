@@ -1,4 +1,4 @@
-package com.bliss.headlessdroid;
+package com.bliss.headlessandroid;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;

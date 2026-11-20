@@ -1,6 +1,6 @@
 # MCP endpoint
 
-Headless Droid serves an MCP endpoint from the phone itself, so an AI client
+Headless Android serves an MCP endpoint from the phone itself, so an AI client
 connects to the phone the way a person opens the app: one host, one port, one
 token.
 
@@ -44,7 +44,7 @@ endpoint) at any time; the server restarts with the new token immediately.
 
 | Method | Reply |
 |---|---|
-| `initialize` | protocol version, capabilities, `serverInfo {name:"Headless Droid", version:"1.0.0"}` |
+| `initialize` | protocol version, capabilities, `serverInfo {name:"Headless Android", version:"1.0.0"}` |
 | `notifications/initialized` | HTTP 202, empty body |
 | `ping` | `{}` |
 | `tools/list` | every tool with its input schema |
@@ -97,13 +97,39 @@ accepts `back`, `home`, `recents`, `enter`, `space`, `tab`, `delete`, `power`,
 Every one of these is addressed to that slot's display — the phone's own screen
 never sees them.
 
+### `ui_status`, `ui_tree`, `ui_find`, `ui_click`, `ui_set_text`
+
+These tools use Android's real `UiAutomation`, hosted by the app's own Shizuku
+shell process. They are semantic — an agent finds an element and acts on it,
+instead of guessing pixels. No accessibility service needs enabling and no
+external controller is installed.
+
+```json
+{"name":"ui_status","arguments":{}}
+{"name":"ui_tree","arguments":{"slot":1,"max_nodes":400}}
+{"name":"ui_find","arguments":{"slot":1,"text":"Search","clickable":true}}
+{"name":"ui_click","arguments":{"slot":1,"text":"Search","clickable":true}}
+{"name":"ui_set_text","arguments":{"slot":1,"value":"hello","resource_id":"search"}}
+```
+
+`ui_tree` returns `windows`, `nodes` and `matches`. Every node has `id`, `text`,
+`content_description`, `resource_id`, `class`, `bounds`, `center` and state
+flags. Use `ui_find` to narrow the tree by `text`, `content_description`,
+`resource_id`, `class_name`, `package`, `exact`, `clickable`, `editable`,
+`scrollable`, `focused` or `checked`. `ui_click`, `ui_long_click`, `ui_focus`,
+`ui_scroll_forward` and `ui_scroll_backward` act on the first match;
+`ui_set_text` takes the new string in `value` and a selector for the editable
+node. Read a fresh tree before each action: Android accessibility node handles
+are valid only for one read. All tools are scoped to the slot's virtual display
+and return a structured error if that display has no windows yet.
+
 ### `screenshot`
 ```json
 {"slot":1,"scale":0.5,"format":"png","save":true}
 ```
 Returns the frame as a base64 data URI plus `width` and `height`. With
 `save:true` the same bytes are written to
-`Download/HeadlessDroid/shots/<slot>-<label>-<timestamp>.jpg` and the file name
+`Download/HeadlessAndroid/shots/<slot>-<label>-<timestamp>.jpg` and the file name
 comes back in the reply.
 
 ### `screenshot_grid`
@@ -118,7 +144,7 @@ A composite of every running app, laid out like the grid on screen.
 {"slot":1,"action":"stop"}
 ```
 Recording is a screen capture, so 10–15 fps per slot is the honest range.
-`stop` publishes the MP4 to `Download/HeadlessDroid/videos/` and returns its
+`stop` publishes the MP4 to `Download/HeadlessAndroid/videos/` and returns its
 absolute path.
 
 ### `wait_for_change`

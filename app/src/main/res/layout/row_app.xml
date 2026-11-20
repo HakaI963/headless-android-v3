@@ -1,27 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- One row in the app picker: label on the first line, package in mono below. -->
+<!-- One installed app: real launcher icon, label, package, add mark. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="wrap_content"
+    android:layout_height="@dimen/row_h"
     android:background="?android:attr/selectableItemBackground"
     android:gravity="center_vertical"
-    android:minHeight="56dp"
     android:orientation="horizontal"
-    android:paddingHorizontal="16dp"
-    android:paddingVertical="8dp">
+    android:paddingStart="@dimen/space_5"
+    android:paddingEnd="@dimen/space_5">
 
     <ImageView
         android:id="@+id/row_icon"
-        android:layout_width="24dp"
-        android:layout_height="24dp"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
         android:contentDescription="@string/action_apps"
-        android:src="@drawable/ic_phone"
-        android:tint="@color/text_muted" />
+        android:src="@drawable/ic_phone" />
 
     <LinearLayout
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:layout_marginStart="12dp"
+        android:layout_marginStart="@dimen/space_4"
         android:layout_weight="1"
         android:orientation="vertical">
 
@@ -32,13 +30,14 @@
             android:ellipsize="end"
             android:maxLines="1"
             android:textColor="@color/text_primary"
-            android:textSize="15sp" />
+            android:textSize="@dimen/text_secondary" />
 
         <TextView
             android:id="@+id/row_package"
             style="@style/TextAppearance.Droid.Micro"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_1"
             android:ellipsize="middle"
             android:maxLines="1" />
     </LinearLayout>

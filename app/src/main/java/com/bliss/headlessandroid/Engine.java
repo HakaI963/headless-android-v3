@@ -1,4 +1,4 @@
-package com.bliss.headlessdroid;
+package com.bliss.headlessandroid;
 
 import android.content.ComponentName;
 import android.content.Context;
@@ -35,7 +35,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
  * {@link #worker} so the UI thread only reads volatile state.
  */
 public final class Engine {
-    private static final String TAG = "HeadlessDroid";
+    private static final String TAG = "HeadlessAndroid";
     private static final int TICK_MS = 45;
     private static final long MIN_FRAME_MS = 70;
 
@@ -93,14 +93,14 @@ public final class Engine {
 
     private Engine(Context context) {
         this.context = context;
-        this.thread = new HandlerThread("HeadlessDroid");
+        this.thread = new HandlerThread("HeadlessAndroid");
         this.thread.start();
         this.worker = new Handler(this.thread.getLooper());
         PowerManager.WakeLock lock = null;
         try {
             PowerManager power = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
             if (power != null) {
-                lock = power.newWakeLock(PowerManager.FULL_WAKE_LOCK, "HeadlessDroid:grid");
+                lock = power.newWakeLock(PowerManager.FULL_WAKE_LOCK, "HeadlessAndroid:grid");
                 lock.setReferenceCounted(false);
             }
         } catch (Throwable ignored) {
@@ -689,6 +689,35 @@ public final class Engine {
 
     private CommandInput input(int slot) {
         return new CommandInput(slot);
+    }
+
+    /**
+     * Real Android UI automation, performed by the shell process on the display
+     * that belongs to one slot. The caller supplies the semantic operation and
+     * its selector; this method only resolves the slot to a display id.
+     */
+    public JSONObject ui(String operation, JSONObject arguments) throws Exception {
+        int slot = arguments.optInt("slot", 0);
+        Tile tile = tile(slot);
+        if (tile == null || tile.displayId < 0) {
+            throw new IllegalArgumentException("slot " + slot + " is not running on a display");
+        }
+        JSONObject command = new JSONObject();
+        java.util.Iterator<String> keys = arguments.keys();
+        while (keys.hasNext()) {
+            String key = keys.next();
+            if (!"slot".equals(key)) {
+                command.put(key, arguments.get(key));
+            }
+        }
+        command.put("cmd", "ui");
+        command.put("op", operation);
+        command.put("display", tile.displayId);
+        JSONObject reply = Shell.get(context).exec(command);
+        if (reply == null) {
+            throw new IllegalStateException("Shizuku shell service did not reply");
+        }
+        return reply;
     }
 
     /** Small adapter so callers get a boolean instead of JSON. */

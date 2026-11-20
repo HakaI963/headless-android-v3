@@ -1,8 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  The grid screen: quiet chrome at the top and bottom, the tiles in the middle.
-  Nothing scrolls horizontally except the action bar, which only appears when a
-  tile is selected.
+  The run screen. A real app shell: title, one session card, one section,
+  the live displays, and a labelled control panel for the selected display.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/root"
@@ -17,9 +16,10 @@
         android:layout_height="wrap_content"
         android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:paddingHorizontal="16dp"
-        android:paddingTop="16dp"
-        android:paddingBottom="12dp">
+        android:paddingStart="@dimen/space_5"
+        android:paddingTop="@dimen/space_5"
+        android:paddingEnd="@dimen/space_5"
+        android:paddingBottom="@dimen/space_4">
 
         <LinearLayout
             android:layout_width="0dp"
@@ -32,120 +32,157 @@
                 style="@style/TextAppearance.Droid.Title"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="@string/app_name" />
+                android:text="@string/grid_title" />
 
             <TextView
-                android:id="@+id/subtitle"
-                style="@style/TextAppearance.Droid.Micro"
+                android:id="@+id/tagline"
+                style="@style/TextAppearance.Droid.Secondary"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="@string/grid_subtitle" />
+                android:layout_marginTop="@dimen/space_1"
+                android:text="@string/grid_tagline" />
         </LinearLayout>
 
         <ImageButton
             android:id="@+id/btn_columns"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
+            android:layout_width="@dimen/control_h"
+            android:layout_height="@dimen/control_h"
             android:background="@drawable/bg_button"
-            android:contentDescription="@string/settings_columns"
-            android:padding="10dp"
+            android:contentDescription="@string/action_columns"
+            android:padding="12dp"
             android:scaleType="fitCenter"
             android:src="@drawable/ic_grid" />
 
         <ImageButton
             android:id="@+id/btn_apps"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:layout_marginStart="8dp"
-            android:background="@drawable/bg_button"
-            android:contentDescription="@string/action_apps"
-            android:padding="10dp"
+            android:layout_width="@dimen/control_h"
+            android:layout_height="@dimen/control_h"
+            android:layout_marginStart="@dimen/space_2"
+            android:background="@drawable/bg_button_accent"
+            android:contentDescription="@string/action_add"
+            android:padding="12dp"
             android:scaleType="fitCenter"
-            android:src="@drawable/ic_plus" />
+            android:src="@drawable/ic_plus"
+            android:tint="@color/on_accent" />
 
         <ImageButton
             android:id="@+id/btn_settings"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:layout_marginStart="8dp"
+            android:layout_width="@dimen/control_h"
+            android:layout_height="@dimen/control_h"
+            android:layout_marginStart="@dimen/space_2"
             android:background="@drawable/bg_button"
             android:contentDescription="@string/settings_title"
-            android:padding="10dp"
+            android:padding="12dp"
             android:scaleType="fitCenter"
             android:src="@drawable/ic_settings" />
     </LinearLayout>
 
-    <View
-        android:layout_width="match_parent"
-        android:layout_height="@dimen/hairline"
-        android:background="@color/hairline" />
-
-    <!-- Status strip: two dots and the numbers an operator actually needs. -->
+    <!-- One session card: the two facts an operator needs before driving apps. -->
     <LinearLayout
-        android:id="@+id/status"
+        android:id="@+id/session"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:paddingHorizontal="16dp"
-        android:paddingTop="12dp"
-        android:paddingBottom="12dp">
+        android:layout_marginStart="@dimen/space_5"
+        android:layout_marginEnd="@dimen/space_5"
+        android:background="@drawable/bg_card"
+        android:orientation="vertical"
+        android:padding="@dimen/space_4">
 
-        <LinearLayout
-            android:id="@+id/status_shell"
+        <TextView
+            style="@style/TextAppearance.Droid.Micro"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:background="?android:attr/selectableItemBackground"
-            android:gravity="center_vertical"
-            android:orientation="horizontal"
-            android:paddingVertical="4dp">
-
-            <ImageView
-                android:id="@+id/dot_shell"
-                android:layout_width="6dp"
-                android:layout_height="6dp"
-                android:contentDescription="@string/shell_title"
-                android:src="@drawable/dot_idle" />
-
-            <TextView
-                android:id="@+id/text_shell"
-                style="@style/TextAppearance.Droid.Micro"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
-                android:text="@string/shell_title" />
-        </LinearLayout>
-
-        <View
-            android:layout_width="@dimen/hairline"
-            android:layout_height="12dp"
-            android:layout_marginHorizontal="12dp"
-            android:background="@color/hairline_strong" />
+            android:text="@string/session_title" />
 
         <LinearLayout
-            android:id="@+id/status_mcp"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_3"
+            android:baselineAligned="false"
+            android:orientation="horizontal">
+
+            <LinearLayout
+                android:id="@+id/status_shell"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:background="?android:attr/selectableItemBackground"
+                android:orientation="horizontal"
+                android:paddingVertical="@dimen/space_1">
+
+                <ImageView
+                    android:id="@+id/dot_shell"
+                    android:layout_width="8dp"
+                    android:layout_height="8dp"
+                    android:layout_gravity="center_vertical"
+                    android:contentDescription="@string/shell_title"
+                    android:src="@drawable/dot_idle" />
+
+                <TextView
+                    android:id="@+id/text_shell"
+                    style="@style/TextAppearance.Droid.Secondary"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="@dimen/space_2"
+                    android:text="@string/shell_title" />
+            </LinearLayout>
+
+            <View
+                android:layout_width="@dimen/hairline"
+                android:layout_height="24dp"
+                android:layout_marginHorizontal="@dimen/space_3"
+                android:background="@color/hairline" />
+
+            <LinearLayout
+                android:id="@+id/status_mcp"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:background="?android:attr/selectableItemBackground"
+                android:orientation="horizontal"
+                android:paddingVertical="@dimen/space_1">
+
+                <ImageView
+                    android:id="@+id/dot_mcp"
+                    android:layout_width="8dp"
+                    android:layout_height="8dp"
+                    android:layout_gravity="center_vertical"
+                    android:contentDescription="@string/mcp_title"
+                    android:src="@drawable/dot_idle" />
+
+                <TextView
+                    android:id="@+id/text_mcp"
+                    style="@style/TextAppearance.Droid.Secondary"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="@dimen/space_2"
+                    android:text="@string/mcp_title" />
+            </LinearLayout>
+        </LinearLayout>
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="@dimen/space_5"
+        android:layout_marginTop="@dimen/space_6"
+        android:layout_marginEnd="@dimen/space_5"
+        android:layout_marginBottom="@dimen/space_3"
+        android:orientation="horizontal">
+
+        <TextView
+            style="@style/TextAppearance.Droid.Section"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/grid_section" />
+
+        <TextView
+            android:id="@+id/subtitle"
+            style="@style/TextAppearance.Droid.Micro"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:background="?android:attr/selectableItemBackground"
-            android:gravity="center_vertical"
-            android:orientation="horizontal"
-            android:paddingVertical="4dp">
-
-            <ImageView
-                android:id="@+id/dot_mcp"
-                android:layout_width="6dp"
-                android:layout_height="6dp"
-                android:contentDescription="@string/mcp_title"
-                android:src="@drawable/dot_idle" />
-
-            <TextView
-                android:id="@+id/text_mcp"
-                style="@style/TextAppearance.Droid.Micro"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
-                android:text="@string/mcp_title" />
-        </LinearLayout>
+            android:text="@string/grid_subtitle" />
     </LinearLayout>
 
     <ScrollView
@@ -155,13 +192,14 @@
         android:layout_weight="1"
         android:clipToPadding="false"
         android:fillViewport="true"
-        android:paddingHorizontal="16dp">
+        android:paddingStart="@dimen/space_5"
+        android:paddingEnd="@dimen/space_5">
 
         <FrameLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content">
 
-            <com.bliss.headlessdroid.GridView
+            <com.bliss.headlessandroid.GridView
                 android:id="@+id/grid"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -175,60 +213,92 @@
                 android:orientation="vertical"
                 android:visibility="gone">
 
+                <com.bliss.headlessandroid.EmptyStateView
+                    android:layout_width="200dp"
+                    android:layout_height="140dp" />
+
+                <TextView
+                    style="@style/TextAppearance.Droid.Body"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/space_5"
+                    android:text="@string/grid_empty_title" />
+
                 <TextView
                     style="@style/TextAppearance.Droid.Secondary"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/space_2"
+                    android:gravity="center"
+                    android:lineSpacingExtra="4dp"
+                    android:text="@string/grid_empty_body" />
+
+                <TextView
+                    style="@style/TextAppearance.Droid.Micro"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:gravity="center"
-                    android:paddingHorizontal="24dp"
-                    android:text="@string/grid_empty" />
+                    android:layout_marginTop="@dimen/space_3"
+                    android:text="@string/grid_empty_hint" />
 
-                <LinearLayout
+                <TextView
                     android:id="@+id/empty_add"
                     android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="16dp"
+                    android:layout_height="@dimen/control_h"
+                    android:layout_marginTop="@dimen/space_5"
                     android:background="@drawable/bg_button_accent"
-                    android:orientation="horizontal">
-
-                    <ImageView
-                        android:layout_width="18dp"
-                        android:layout_height="18dp"
-                        android:layout_gravity="center_vertical"
-                        android:contentDescription="@string/action_add"
-                        android:src="@drawable/ic_plus"
-                        android:tint="@color/on_accent" />
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_gravity="center_vertical"
-                        android:layout_marginStart="8dp"
-                        android:paddingVertical="10dp"
-                        android:paddingEnd="16dp"
-                        android:text="@string/action_add"
-                        android:textColor="@color/on_accent"
-                        android:textSize="15sp" />
-                </LinearLayout>
+                    android:gravity="center"
+                    android:paddingStart="@dimen/space_5"
+                    android:paddingEnd="@dimen/space_5"
+                    android:text="@string/action_add"
+                    android:textColor="@color/on_accent"
+                    android:textSize="@dimen/text_secondary" />
             </LinearLayout>
         </FrameLayout>
     </ScrollView>
 
-    <!-- Action bar: only for the selected slot. -->
-    <HorizontalScrollView
-        android:id="@+id/actions_scroll"
+    <!-- Selected display controls. Labelled, in one aligned grid. -->
+    <LinearLayout
+        android:id="@+id/actions_panel"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:clipToPadding="false"
-        android:paddingHorizontal="16dp"
+        android:layout_marginStart="@dimen/space_5"
+        android:layout_marginEnd="@dimen/space_5"
+        android:layout_marginBottom="@dimen/space_4"
+        android:background="@drawable/bg_panel"
+        android:orientation="vertical"
+        android:padding="@dimen/space_4"
         android:visibility="gone">
 
         <LinearLayout
-            android:id="@+id/actions"
-            android:layout_width="wrap_content"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:paddingTop="12dp"
-            android:paddingBottom="12dp" />
-    </HorizontalScrollView>
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/actions_title"
+                style="@style/TextAppearance.Droid.Section"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/grid_section" />
+
+            <ImageButton
+                android:id="@+id/actions_close"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:background="@drawable/bg_button"
+                android:contentDescription="@string/action_close"
+                android:padding="8dp"
+                android:src="@drawable/ic_close" />
+        </LinearLayout>
+
+        <GridLayout
+            android:id="@+id/actions"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_3"
+            android:columnCount="4"
+            android:orientation="horizontal" />
+    </LinearLayout>
 </LinearLayout>

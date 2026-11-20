@@ -1,4 +1,4 @@
-package com.bliss.headlessdroid;
+package com.bliss.headlessandroid;
 
 import android.content.ContentValues;
 import android.content.Context;
@@ -19,8 +19,8 @@ import java.util.List;
  * Writes screenshots and recordings to the phone's Downloads folder.
  *
  * <p>MediaStore is used on Android 10+ so no storage permission is needed; the
- * files land in {@code Download/HeadlessDroid/shots} and
- * {@code Download/HeadlessDroid/videos} where the user and any tooling can pick
+ * files land in {@code Download/HeadlessAndroid/shots} and
+ * {@code Download/HeadlessAndroid/videos} where the user and any tooling can pick
  * them up with a normal file manager or {@code adb pull}.
  */
 final class Captures {

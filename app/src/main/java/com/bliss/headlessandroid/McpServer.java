@@ -1,4 +1,4 @@
-package com.bliss.headlessdroid;
+package com.bliss.headlessandroid;
 
 import android.graphics.Bitmap;
 import android.util.Log;
@@ -24,7 +24,7 @@ import java.util.Locale;
  * can still grab a screenshot.
  */
 public final class McpServer {
-    private static final String TAG = "HeadlessDroid.MCP";
+    private static final String TAG = "HeadlessAndroid.MCP";
     private static final String PROTOCOL_VERSION = "2025-06-18";
 
     private static volatile Engine engine;
@@ -317,14 +317,14 @@ public final class McpServer {
         } catch (Throwable ignored) {
         }
         String target = base == null ? "not listening" : base + "/mcp";
-        return "<!doctype html><meta charset=utf-8><title>Headless Droid</title>"
+        return "<!doctype html><meta charset=utf-8><title>Headless Android</title>"
                 + "<style>body{background:#121417;color:#E6E9EC;"
                 + "font:15px/1.6 monospace;margin:24px;max-width:44rem}"
                 + "h1{font-size:20px;font-weight:400;margin:0 0 4px}"
                 + "a{color:#E0A458}table{border-collapse:collapse;margin-top:16px}"
                 + "td{padding:4px 12px 4px 0;color:#A0A8B0;border-top:1px solid #2A2F35}"
                 + "td:first-child{color:#E6E9EC}</style>"
-                + "<h1>Headless Droid</h1>"
+                + "<h1>Headless Android</h1>"
                 + "<p>An MCP endpoint for nine Android apps on virtual displays.</p>"
                 + "<p>An MCP client should use <a>" + target + "</a></p>"
                 + "<p>An MCP client should send the token as <b>X-Droid-Token</b>.</p>"
@@ -413,7 +413,7 @@ public final class McpServer {
         capabilities.put("resources", new JSONObject().put("listChanged", false));
         capabilities.put("prompts", new JSONObject().put("listChanged", false));
         JSONObject info = new JSONObject();
-        info.put("name", "Headless Droid");
+        info.put("name", "Headless Android");
         info.put("version", "1.0.0");
         String negotiated = clientVersion == null || clientVersion.trim().isEmpty()
                 ? PROTOCOL_VERSION : clientVersion.trim();
@@ -432,8 +432,12 @@ public final class McpServer {
                 + " on virtual displays. Use launch_app to add an app, screenshot to see"
                 + " what it renders, and tap/swipe/type_text/key to drive it. Coordinates"
                 + " are normalized 0..1 by default; pass coordinate:\"pixels\" for display"
-                + " pixels. The phone's own screen is never touched by input. Use"
-                + " wait_for_change after an action instead of sleeping.";
+                + " pixels. The phone's own screen is never touched by input. For"
+                + " semantic element-based testing use ui_status, ui_tree, ui_find,"
+                + " ui_click and ui_set_text: they drive Android's real UiAutomation"
+                + " from the Shizuku shell process, scoped to a slot's display. Read a"
+                + " fresh tree before each action because node handles are valid for"
+                + " one read. Use wait_for_change after an action instead of sleeping.";
     }
 
     // -------------------------------------------------------------------- tools
@@ -451,6 +455,15 @@ public final class McpServer {
             {"swipe", "Swipe inside one slot"},
             {"type_text", "Type text into the focused field of one slot"},
             {"key", "Send a key: back, home, recents, enter, tab, delete, power, volume"},
+            {"ui_status", "Check whether real Android UiAutomation is connected in the shell process"},
+            {"ui_tree", "Read the accessibility node tree of one virtual display"},
+            {"ui_find", "Find nodes by text, content description, resource id or flags"},
+            {"ui_click", "Click a matching accessibility node in one slot"},
+            {"ui_long_click", "Long-click a matching accessibility node in one slot"},
+            {"ui_focus", "Focus a matching accessibility node in one slot"},
+            {"ui_scroll_forward", "Scroll a matching node forward in one slot"},
+            {"ui_scroll_backward", "Scroll a matching node backward in one slot"},
+            {"ui_set_text", "Set text on a matching editable node in one slot"},
             {"screenshot", "A frame of one slot as a data URI, optionally saved"},
             {"screenshot_grid", "One image of every running app, laid out like the grid"},
             {"record_video", "Start or stop recording one slot to an MP4"},
@@ -533,6 +546,51 @@ public final class McpServer {
                         + " or a numeric keycode"));
                 required.put("slot");
                 required.put("key");
+                break;
+            }
+            case "ui_status":
+            case "ui_tree":
+            case "ui_find":
+            case "ui_click":
+            case "ui_long_click":
+            case "ui_focus":
+            case "ui_scroll_forward":
+            case "ui_scroll_backward":
+            case "ui_set_text": {
+                if (!"ui_status".equals(name)) {
+                    properties.put("slot", jsonType("integer", "Slot 1-9"));
+                }
+                if ("ui_tree".equals(name) || "ui_find".equals(name)) {
+                    properties.put("text", jsonType("string", "Node text or content description"));
+                    properties.put("content_description", jsonType("string", "Content description"));
+                    properties.put("resource_id", jsonType("string", "View id resource name"));
+                    properties.put("class_name", jsonType("string", "Class name"));
+                    properties.put("package", jsonType("string", "Package name"));
+                    properties.put("exact", jsonType("boolean", "Exact match instead of contains"));
+                    properties.put("clickable", jsonType("boolean", "Only clickable nodes"));
+                    properties.put("editable", jsonType("boolean", "Only editable nodes"));
+                    properties.put("scrollable", jsonType("boolean", "Only scrollable nodes"));
+                    properties.put("focused", jsonType("boolean", "Only focused nodes"));
+                    properties.put("checked", jsonType("boolean", "Only checked nodes"));
+                    properties.put("include_invisible", jsonType("boolean", "Include invisible nodes"));
+                    properties.put("max_nodes", jsonType("integer", "Default 600, max 2500"));
+                } else if (!"ui_status".equals(name)) {
+                    properties.put("text", jsonType("string", "Node text or description to match"));
+                    properties.put("content_description", jsonType("string", "Content description"));
+                    properties.put("resource_id", jsonType("string", "View id to match"));
+                    properties.put("class_name", jsonType("string", "Class name to match"));
+                    properties.put("exact", jsonType("boolean", "Exact match"));
+                }
+                if ("ui_set_text".equals(name)) {
+                    properties.put("value", jsonType("string", "Text to set on the editable node"));
+                    properties.put("resource_id", jsonType("string", "Editable node selector"));
+                    properties.put("content_description", jsonType("string", "Editable node selector"));
+                    properties.put("class_name", jsonType("string", "Editable node selector"));
+                    required.put("value");
+                }
+                if (!"ui_status".equals(name)) {
+                    required.put("slot");
+                }
                 break;
             }
             case "screenshot": {
@@ -685,6 +743,24 @@ public final class McpServer {
                     return engine.key(slot, code) ? textResult("sent key to slot " + slot)
                             : errorResult("input needs the shell service");
                 }
+                case "ui_status":
+                    return uiStatus();
+                case "ui_tree":
+                    return ui("tree", arguments);
+                case "ui_find":
+                    return ui("find", arguments);
+                case "ui_click":
+                    return ui("click", arguments);
+                case "ui_long_click":
+                    return ui("long_click", arguments);
+                case "ui_focus":
+                    return ui("focus", arguments);
+                case "ui_scroll_forward":
+                    return ui("scroll_forward", arguments);
+                case "ui_scroll_backward":
+                    return ui("scroll_backward", arguments);
+                case "ui_set_text":
+                    return ui("set_text", arguments);
                 case "screenshot":
                     return screenshot(arguments, false);
                 case "screenshot_grid":
@@ -722,6 +798,31 @@ public final class McpServer {
             Log.w(TAG, "tool " + name + " failed: " + e);
             return errorResult("tool " + name + " failed: " + e);
         }
+    }
+
+    /** Reports the shell-side UiAutomation connection without needing a slot. */
+    private static JSONObject uiStatus() throws Exception {
+        JSONObject reply = Shell.get(engine.context()).command("info");
+        if (reply == null) {
+            return errorResult("Shizuku shell service is not available");
+        }
+        JSONObject out = new JSONObject();
+        out.put("shell", engine.shellState());
+        out.put("shell_uid", reply.optInt("uid", -1));
+        out.put("input_available", reply.optBoolean("input_available", false));
+        out.put("ui_automation", reply.optJSONObject("ui_automation"));
+        if (reply.has("error")) {
+            out.put("error", reply.getString("error"));
+        }
+        return textResult(out.toString(2));
+    }
+
+    private static JSONObject ui(String operation, JSONObject arguments) throws Exception {
+        JSONObject reply = engine.ui(operation, arguments);
+        if (reply.has("error") && !reply.optBoolean("ok")) {
+            return errorResult(reply.getString("error"));
+        }
+        return textResult(reply.toString(2));
     }
 
     private static boolean tap(JSONObject arguments) throws Exception {

@@ -1,4 +1,4 @@
-package com.bliss.headlessdroid
+package com.bliss.headlessandroid
 
 import android.app.Activity
 import android.app.AlertDialog
@@ -16,6 +16,7 @@ import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
+import android.widget.GridLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -34,8 +35,9 @@ class MainActivity : Activity(), GridView.Listener {
     private lateinit var engine: Engine
     private lateinit var grid: GridView
     private lateinit var empty: View
-    private lateinit var actionsScroll: View
-    private lateinit var actions: LinearLayout
+    private lateinit var actionsPanel: View
+    private lateinit var actionsTitle: TextView
+    private lateinit var actions: GridLayout
     private lateinit var subtitle: TextView
     private lateinit var textShell: TextView
     private lateinit var textMcp: TextView
@@ -80,7 +82,8 @@ class MainActivity : Activity(), GridView.Listener {
         subtitle = findViewById(R.id.subtitle)
         grid = findViewById(R.id.grid)
         empty = findViewById(R.id.empty)
-        actionsScroll = findViewById(R.id.actions_scroll)
+        actionsPanel = findViewById(R.id.actions_panel)
+        actionsTitle = findViewById(R.id.actions_title)
         actions = findViewById(R.id.actions)
         textShell = findViewById(R.id.text_shell)
         textMcp = findViewById(R.id.text_mcp)
@@ -94,6 +97,11 @@ class MainActivity : Activity(), GridView.Listener {
         findViewById<View>(R.id.empty_add).setOnClickListener { openApps() }
         findViewById<View>(R.id.status_shell).setOnClickListener { grantShell() }
         findViewById<View>(R.id.status_mcp).setOnClickListener { showMcp() }
+        findViewById<View>(R.id.actions_close).setOnClickListener {
+            selectedSlot = NO_SLOT
+            refreshActions()
+            grid.rebuild(engine.tiles(), selectedSlot)
+        }
 
         rebuildGrid()
         refreshStatus()
@@ -129,7 +137,7 @@ class MainActivity : Activity(), GridView.Listener {
         root.setPadding(pad, pad, pad, pad)
 
         val title = TextView(this)
-        title.text = "Headless Droid could not start"
+        title.text = "Headless Android could not start"
         title.textSize = 18f
         title.setTextColor(Ui.color(this, R.color.text_primary))
         root.addView(title)
@@ -151,7 +159,7 @@ class MainActivity : Activity(), GridView.Listener {
         root.addView(detail)
 
         val where = TextView(this)
-        where.text = "The full stack trace is in Download/HeadlessDroid/crashes/"
+        where.text = "The full stack trace is in Download/HeadlessAndroid/crashes/"
         where.textSize = 13f
         where.setTextColor(Ui.color(this, R.color.text_muted))
         where.typeface = android.graphics.Typeface.MONOSPACE
@@ -241,10 +249,10 @@ class MainActivity : Activity(), GridView.Listener {
         if (tile == null) {
             actionBarSlot = NO_SLOT
             actionBarSignature = ""
-            actionsScroll.visibility = View.GONE
+            actionsPanel.visibility = View.GONE
             return
         }
-        // Only rebuild the chips when the slot or its recording state changed.
+        // Rebuild only when the selected display or its recording state changed.
         val signature = tile.slot.toString() + ":" + tile.recording + ":" + tile.state
         if (tile.slot == actionBarSlot && signature == actionBarSignature) {
             return
@@ -252,8 +260,9 @@ class MainActivity : Activity(), GridView.Listener {
         actionBarSlot = tile.slot
         actionBarSignature = signature
 
+        actionsTitle.text = "Display " + tile.displayId + " · " + tile.label
         actions.removeAllViews()
-        actionsScroll.visibility = View.VISIBLE
+        actionsPanel.visibility = View.VISIBLE
         addAction(R.drawable.ic_back, R.string.action_back,
                 { key(android.view.KeyEvent.KEYCODE_BACK) })
         addAction(R.drawable.ic_home, R.string.action_home,
@@ -276,34 +285,36 @@ class MainActivity : Activity(), GridView.Listener {
         })
     }
 
+    /** One labelled control in the selected-display panel. */
     private fun addAction(icon: Int, label: Int, listener: () -> Unit) {
-        val chip = LinearLayout(this)
-        chip.orientation = LinearLayout.HORIZONTAL
-        chip.gravity = Gravity.CENTER_VERTICAL
-        chip.setBackgroundResource(R.drawable.bg_button)
-        chip.setPadding(Ui.dp(this, 12f), Ui.dp(this, 10f), Ui.dp(this, 14f), Ui.dp(this, 10f))
-        val params = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-        params.marginEnd = Ui.dp(this, 8f)
-        chip.layoutParams = params
+        val button = LinearLayout(this)
+        button.orientation = LinearLayout.VERTICAL
+        button.gravity = Gravity.CENTER
+        button.setBackgroundResource(R.drawable.bg_button)
+        button.setPadding(Ui.dp(this, 4f), Ui.dp(this, 12f),
+                Ui.dp(this, 4f), Ui.dp(this, 10f))
+        val params = GridLayout.LayoutParams()
+        params.width = 0
+        params.height = ViewGroup.LayoutParams.WRAP_CONTENT
+        params.columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f)
+        params.setMargins(Ui.dp(this, 4f), 0, Ui.dp(this, 4f), Ui.dp(this, 8f))
+        button.layoutParams = params
 
         val image = ImageView(this)
         image.setImageResource(icon)
         image.setColorFilter(Ui.color(this, R.color.text_secondary))
-        chip.addView(image, Ui.size(this, 18))
+        button.addView(image, Ui.size(this, 24))
 
         val text = TextView(this)
         text.setText(label)
         text.textSize = 13f
         text.setTextColor(Ui.color(this, R.color.text_secondary))
-        val textParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-        textParams.marginStart = Ui.dp(this, 8f)
-        text.layoutParams = textParams
-        chip.addView(text)
+        text.setPadding(0, Ui.dp(this, 8f), 0, 0)
+        button.addView(text, LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
 
-        chip.setOnClickListener { listener() }
-        actions.addView(chip)
+        button.setOnClickListener { listener() }
+        actions.addView(button)
     }
 
     // ---------------------------------------------------------------- commands
@@ -379,7 +390,7 @@ class MainActivity : Activity(), GridView.Listener {
             return
         }
         Shell.get(this).requestPermission()
-        toast("Grant Headless Droid in Shizuku")
+        toast("Grant Headless Android in Shizuku")
     }
 
     private fun cycleColumns() {
@@ -445,7 +456,7 @@ class MainActivity : Activity(), GridView.Listener {
 
     private fun copy(value: String) {
         val manager = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-        manager?.setPrimaryClip(ClipData.newPlainText("Headless Droid", value))
+        manager?.setPrimaryClip(ClipData.newPlainText("Headless Android", value))
         toast("Copied")
     }
 
@@ -472,7 +483,7 @@ class MainActivity : Activity(), GridView.Listener {
     }
 
     private companion object {
-        private const val TAG = "HeadlessDroid"
+        private const val TAG = "HeadlessAndroid"
         const val TICK_MS = 60L
         const val NO_SLOT = -1
     }

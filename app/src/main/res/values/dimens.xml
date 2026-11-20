@@ -1,28 +1,31 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Every value is a multiple of 4. Cards 12, panels 16, page edges 16/24. -->
 <resources>
     <dimen name="space_1">4dp</dimen>
     <dimen name="space_2">8dp</dimen>
     <dimen name="space_3">12dp</dimen>
     <dimen name="space_4">16dp</dimen>
+    <dimen name="space_5">20dp</dimen>
     <dimen name="space_6">24dp</dimen>
     <dimen name="space_8">32dp</dimen>
+    <dimen name="space_10">40dp</dimen>
+    <dimen name="space_12">48dp</dimen>
 
     <dimen name="radius_control">10dp</dimen>
-    <dimen name="radius_card">12dp</dimen>
-    <dimen name="radius_panel">16dp</dimen>
-    <dimen name="radius_tile">12dp</dimen>
+    <dimen name="radius_card">16dp</dimen>
+    <dimen name="radius_panel">20dp</dimen>
+    <dimen name="radius_tile">14dp</dimen>
     <dimen name="hairline">1dp</dimen>
     <dimen name="hairline_focus">2dp</dimen>
 
-    <!-- type scale: 34 title, 16 body, 13 secondary, 11 mono micro -->
-    <dimen name="text_title">20sp</dimen>
-    <dimen name="text_section">13sp</dimen>
-    <dimen name="text_body">15sp</dimen>
-    <dimen name="text_secondary">13sp</dimen>
-    <dimen name="text_micro">11sp</dimen>
-    <dimen name="text_mono">11sp</dimen>
+    <dimen name="text_title">24sp</dimen>
+    <dimen name="text_section">14sp</dimen>
+    <dimen name="text_body">16sp</dimen>
+    <dimen name="text_secondary">14sp</dimen>
+    <dimen name="text_micro">12sp</dimen>
+    <dimen name="text_mono">12sp</dimen>
 
-    <!-- grid -->
-    <dimen name="tile_min_h">140dp</dimen>
+    <dimen name="appbar_h">72dp</dimen>
+    <dimen name="control_h">44dp</dimen>
+    <dimen name="row_h">64dp</dimen>
+    <dimen name="tile_min_h">180dp</dimen>
 </resources>

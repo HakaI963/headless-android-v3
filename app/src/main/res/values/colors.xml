@@ -1,35 +1,30 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Headless Droid color ramp: one tinted neutral ramp (graphite, slightly cool)
-  plus exactly one accent (signal amber). Nothing in the chrome carries color;
-  the color lives inside the tiles, where the real apps run.
+  One ink-tinted neutral ramp and one signal accent. Chrome stays neutral;
+  the color lives in the live app frames and the one signal dot.
 -->
 <resources>
-    <!-- neutrals, dark ramp -->
-    <color name="bg">#FF121417</color>
-    <color name="surface">#FF191C1F</color>
-    <color name="raised">#FF20242A</color>
-    <color name="pressed">#FF262B31</color>
-    <color name="hairline">#FF2A2F35</color>
-    <color name="hairline_strong">#FF39404A</color>
+    <color name="bg">#FF0B0D12</color>
+    <color name="surface">#FF12161D</color>
+    <color name="surface_2">#FF171C25</color>
+    <color name="raised">#FF1E2530</color>
+    <color name="pressed">#FF252D39</color>
+    <color name="hairline">#FF242B36</color>
+    <color name="hairline_strong">#FF394454</color>
 
-    <!-- text roles -->
-    <color name="text_primary">#FFE6E9EC</color>
-    <color name="text_secondary">#FFA0A8B0</color>
-    <color name="text_muted">#FF6B747C</color>
+    <color name="text_primary">#FFEEF1F5</color>
+    <color name="text_secondary">#FFA8B2C0</color>
+    <color name="text_muted">#FF7B8799</color>
 
-    <!-- the one accent -->
     <color name="accent">#FFE0A458</color>
     <color name="accent_dim">#FF8A6B34</color>
     <color name="on_accent">#FF1A1206</color>
 
-    <!-- status colors, toned down to sit inside the ramp -->
     <color name="live">#FFE0A458</color>
-    <color name="idle">#FF4E5761</color>
-    <color name="stopped">#FF6B747C</color>
-    <color name="danger">#FFC96A5E</color>
+    <color name="idle">#FF5A6574</color>
+    <color name="stopped">#FF7B8799</color>
+    <color name="danger">#FFE07066</color>
     <color name="good">#FF7BAF95</color>
 
-    <!-- launcher plate -->
-    <color name="launcher">#FF121417</color>
+    <color name="launcher">#FF0B0D12</color>
 </resources>

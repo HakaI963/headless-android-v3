@@ -28,7 +28,7 @@
         <!-- Shizuku binder bridge: authority must be <applicationId>.shizuku -->
         <provider
             android:name="rikka.shizuku.ShizukuProvider"
-            android:authorities="com.bliss.headlessdroid.shizuku"
+            android:authorities="com.bliss.headlessandroid.shizuku"
             android:enabled="true"
             android:exported="true"
             android:multiprocess="false"
@@ -41,10 +41,12 @@
         <!-- Boot screen first: it opens before any engine work and answers
              "does this app run on this phone" with specific checks. -->
         <activity
-            android:name=".BootActivity"
+            android:name=".MainActivity"
             android:configChanges="orientation|screenSize|keyboardHidden|uiMode"
             android:exported="true"
-            android:screenOrientation="portrait">
+            android:launchMode="singleTop"
+            android:screenOrientation="portrait"
+            android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -52,12 +54,10 @@
         </activity>
 
         <activity
-            android:name=".MainActivity"
+            android:name=".BootActivity"
             android:configChanges="orientation|screenSize|keyboardHidden|uiMode"
             android:exported="false"
-            android:launchMode="singleTop"
-            android:screenOrientation="portrait"
-            android:windowSoftInputMode="adjustResize" />
+            android:screenOrientation="portrait" />
 
         <activity
             android:name=".SettingsActivity"

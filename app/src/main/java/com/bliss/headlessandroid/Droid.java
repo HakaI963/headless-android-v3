@@ -1,9 +1,9 @@
-package com.bliss.headlessdroid;
+package com.bliss.headlessandroid;
 
 /**
  * Product-level constants and tiny shared helpers.
  *
- * <p>Headless Droid runs real, installed apps directly on virtual displays. No
+ * <p>Headless Android runs real, installed apps directly on virtual displays. No
  * repackaging, no clones, no second copy of anything: the app's own APK and its
  * own data are used as-is, on the user's own phone, in user space.
  */
@@ -11,8 +11,8 @@ public final class Droid {
     private Droid() {
     }
 
-    public static final String PKG = "com.bliss.headlessdroid";
-    public static final String TAG = "HeadlessDroid";
+    public static final String PKG = "com.bliss.headlessandroid";
+    public static final String TAG = "HeadlessAndroid";
 
     /** A 3x3 grid is the hard cap: 9 slots, at most 3 columns per row. */
     public static final int MAX_SLOTS = 9;
@@ -30,8 +30,8 @@ public final class Droid {
     /** MCP clients identify with this header. */
     public static final String TOKEN_HEADER = "X-Droid-Token";
 
-    public static final String DIR_SHOTS = "Download/HeadlessDroid/shots";
-    public static final String DIR_VIDEOS = "Download/HeadlessDroid/videos";
+    public static final String DIR_SHOTS = "Download/HeadlessAndroid/shots";
+    public static final String DIR_VIDEOS = "Download/HeadlessAndroid/videos";
 
     public static final String EXT_LAUNCHER = "moe.shizuku.privileged.api";
 

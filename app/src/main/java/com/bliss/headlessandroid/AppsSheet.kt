@@ -1,7 +1,8 @@
-package com.bliss.headlessdroid
+package com.bliss.headlessandroid
 
 import android.app.Activity
 import android.app.Dialog
+import android.graphics.drawable.Drawable
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.LayoutInflater
@@ -27,16 +28,21 @@ internal object AppsSheet {
     fun open(activity: Activity, engine: Engine) {
         val dialog = Dialog(activity)
         dialog.setContentView(R.layout.apps)
-        dialog.window?.setLayout(ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT)
+        dialog.window?.apply {
+            setLayout(ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT)
+            setGravity(android.view.Gravity.BOTTOM)
+            setBackgroundDrawableResource(R.drawable.bg_sheet)
+        }
         dialog.setCancelable(true)
+        dialog.findViewById<View>(R.id.apps_close).setOnClickListener { dialog.dismiss() }
 
         val list = dialog.findViewById<ListView>(R.id.apps_list)
         val empty = dialog.findViewById<TextView>(R.id.apps_empty)
         val search = dialog.findViewById<EditText>(R.id.apps_search)
         list.emptyView = empty
 
-        val adapter = Adapter(engine.apps())
+        val adapter = Adapter(activity, engine.apps())
         list.adapter = adapter
         // The installed-app list is built off the UI thread; refresh the sheet
         // when it lands instead of showing an empty grid of apps.
@@ -73,7 +79,10 @@ internal object AppsSheet {
         dialog.show()
     }
 
-    private class Adapter(entries: List<Engine.AppEntry>) : BaseAdapter() {
+    private class Adapter(
+        private val activity: Activity,
+        entries: List<Engine.AppEntry>
+    ) : BaseAdapter() {
 
         private val all = ArrayList(entries)
         private var shown = ArrayList(entries)
@@ -111,6 +120,12 @@ internal object AppsSheet {
             val entry = shown[position]
             view.findViewById<TextView>(R.id.row_label).text = entry.label
             view.findViewById<TextView>(R.id.row_package).text = entry.pkg
+            val icon: Drawable? = try {
+                activity.packageManager.getApplicationIcon(entry.pkg)
+            } catch (e: Throwable) {
+                null
+            }
+            view.findViewById<ImageView>(R.id.row_icon).setImageDrawable(icon)
             return view
         }
     }

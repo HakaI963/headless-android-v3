@@ -1,4 +1,4 @@
-package com.bliss.headlessdroid;
+package com.bliss.headlessandroid;
 
 import android.graphics.Bitmap;
 import android.media.Image;
@@ -28,7 +28,7 @@ import java.util.concurrent.locks.ReentrantLock;
  * is the honest number, and more slots means fewer frames each.
  */
 public final class Recorder {
-    private static final String TAG = "HeadlessDroid";
+    private static final String TAG = "HeadlessAndroid";
     private static final String MIME = "video/avc";
     private static final long JOIN_SLICE_MS = 400;
     private static final long DRAIN_TIMEOUT_MS = 6000;

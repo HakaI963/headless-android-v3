@@ -1,4 +1,4 @@
-package com.bliss.headlessdroid;
+package com.bliss.headlessandroid;
 
 import android.graphics.Bitmap;
 
@@ -73,15 +73,15 @@ public final class Tile {
     public int statusColor() {
         switch (state) {
             case LIVE:
-                return com.bliss.headlessdroid.R.color.live;
+                return com.bliss.headlessandroid.R.color.live;
             case STARTING:
-                return com.bliss.headlessdroid.R.color.accent;
+                return com.bliss.headlessandroid.R.color.accent;
             case STOPPED:
-                return com.bliss.headlessdroid.R.color.stopped;
+                return com.bliss.headlessandroid.R.color.stopped;
             case ERROR:
-                return com.bliss.headlessdroid.R.color.danger;
+                return com.bliss.headlessandroid.R.color.danger;
             default:
-                return com.bliss.headlessdroid.R.color.idle;
+                return com.bliss.headlessandroid.R.color.idle;
         }
     }
 

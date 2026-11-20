@@ -1,4 +1,4 @@
-package com.bliss.headlessdroid;
+package com.bliss.headlessandroid;
 
 import android.app.Application;
 import android.content.Context;
@@ -14,7 +14,7 @@ import java.io.StringWriter;
  * Process split, and the app's safety net.
  *
  * <p>Two processes run from this app: the normal one, which draws the UI, owns
- * the virtual displays and serves MCP; and {@code com.bliss.headlessdroid:shell},
+ * the virtual displays and serves MCP; and {@code com.bliss.headlessandroid:shell},
  * which Shizuku starts with shell identity. [onCreate] checks the uid so the
  * shell process never builds a grid or starts an HTTP server of its own.
  *
@@ -23,7 +23,7 @@ import java.io.StringWriter;
  * anything to work with.
  */
 public class App extends Application {
-    private static final String CRASH_DIR = "Download/HeadlessDroid/crashes";
+    private static final String CRASH_DIR = "Download/HeadlessAndroid/crashes";
 
     private static volatile Context context;
     private static volatile boolean privileged;
@@ -100,7 +100,7 @@ public class App extends Application {
             File file = new File(directory, name);
             try (OutputStreamWriter writer = new OutputStreamWriter(
                     new FileOutputStream(file), "UTF-8")) {
-                writer.write("Headless Droid crash\n");
+                writer.write("Headless Android crash\n");
                 writer.write("thread: " + (thread == null ? "?" : thread.getName()) + "\n");
                 writer.write(describe(error) + "\n\n");
                 writer.write(trace.toString());

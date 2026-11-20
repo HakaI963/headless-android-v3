@@ -1,11 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Headless Droid</string>
+    <string name="app_name">Headless Android</string>
 
-    <!-- Headless Droid: runs real phone apps on hidden virtual displays. -->
-    <string name="grid_title">Grid</string>
-    <string name="grid_subtitle">Slots</string>
-    <string name="grid_empty">Nothing running. Add an app to the grid.</string>
+    <string name="grid_title">Headless Android</string>
+    <string name="grid_tagline">Private screens for your apps</string>
+    <string name="grid_subtitle">No displays running</string>
+    <string name="grid_section">Displays</string>
+    <string name="grid_empty_title">No displays running</string>
+    <string name="grid_empty_body">Launch an installed app to give it a private screen. The original app keeps its data, signature and settings.</string>
+    <string name="grid_empty_hint">Up to nine apps can run at once</string>
 
     <string name="action_add">Add app</string>
     <string name="action_apps">Apps</string>
@@ -20,6 +23,9 @@
     <string name="action_home">Home</string>
     <string name="action_recents">Recents</string>
     <string name="action_type">Type</string>
+    <string name="action_copy">Copy</string>
+    <string name="action_done">Done</string>
+    <string name="action_columns">Columns</string>
 
     <string name="state_idle">Idle</string>
     <string name="state_starting">Starting</string>
@@ -28,27 +34,43 @@
     <string name="state_error">Error</string>
     <string name="state_loading">Loading</string>
 
-    <string name="mcp_title">MCP endpoint</string>
+    <string name="mcp_title">Agent endpoint</string>
     <string name="mcp_offline">Offline</string>
     <string name="mcp_online">Listening</string>
     <string name="mcp_connecting">Starting</string>
+    <string name="mcp_token_hint">Send this token in the X-Droid-Token header</string>
 
-    <string name="shell_title">Privileged service</string>
+    <string name="shell_title">Shizuku shell</string>
     <string name="shell_ready">Ready</string>
-    <string name="shell_missing">Shizuku required</string>
+    <string name="shell_missing">Grant permission</string>
     <string name="shell_grant">Grant</string>
+    <string name="shell_hint">Tap to open the Shizuku permission sheet</string>
+
+    <string name="session_title">Session</string>
+    <string name="session_hint">One app, one display, no clone</string>
 
     <string name="settings_title">Settings</string>
-    <string name="settings_mcp">MCP endpoint</string>
+    <string name="settings_mcp">Agent endpoint</string>
     <string name="settings_mcp_port">Port</string>
     <string name="settings_mcp_token">Access token</string>
     <string name="settings_mcp_regen">New token</string>
     <string name="settings_mcp_regen_hint">Shown once. Clients send it as the X-Droid-Token header.</string>
-    <string name="settings_grid">Grid</string>
+    <string name="settings_grid">Displays</string>
     <string name="settings_columns">Columns</string>
     <string name="settings_resolution">Screen size per app</string>
     <string name="settings_wake">Keep the display awake</string>
-    <string name="settings_wake_hint">HyperOS sleeps virtual displays with the phone screen.</string>
+    <string name="settings_wake_hint">Some phones sleep virtual displays with the screen.</string>
     <string name="settings_about">About</string>
-    <string name="settings_version">Version</string>
+    <string name="settings_version">Save</string>
+    <string name="settings_diagnostics">Diagnostics</string>
+    <string name="settings_diagnostics_hint">Check this phone before launching apps</string>
+
+    <string name="apps_hint">Search installed apps</string>
+    <string name="apps_empty">No apps match that search</string>
+
+    <string name="diagnostics_title">Diagnostics</string>
+    <string name="diagnostics_subtitle">What this phone can run</string>
+    <string name="diagnostics_summary">Checking…</string>
+    <string name="diagnostics_open">Open the grid</string>
+    <string name="diagnostics_again">Run the checks again</string>
 </resources>

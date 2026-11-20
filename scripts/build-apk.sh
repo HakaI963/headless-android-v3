@@ -2,7 +2,7 @@
 #
 # Builds a debug-signed APK without Gradle.
 #
-# Headless Droid has two dependencies (Shizuku api + provider, pulled from Maven
+# Headless Android has two dependencies (Shizuku api + provider, pulled from Maven
 # as AARs) and no AndroidX, so the whole build is aapt2 -> javac -> kotlinc ->
 # d8 -> zipalign -> apksigner. That runs on the development device itself, which
 # is why this script exists next to the Gradle files.
@@ -169,7 +169,7 @@ native "$BUILD_TOOLS/aapt2" compile --dir "$APP/src/main/res" -o "$BUILD/res.zip
 
 # aapt2 requires a package attribute; AGP 9 forbids it in the source manifest,
 # so inject it into a build-time copy only.
-sed '0,/<manifest /s//<manifest package="com.bliss.headlessdroid" /' \
+sed '0,/<manifest /s//<manifest package="com.bliss.headlessandroid" /' \
     "$APP/src/main/AndroidManifest.xml" > "$BUILD/AndroidManifest.xml"
 
 # aapt2 wants an asset directory that exists; an empty one is fine when the app
@@ -187,7 +187,7 @@ native "$BUILD_TOOLS/aapt2" link \
     -A "$ASSETS" \
     --manifest "$BUILD/AndroidManifest.xml" \
     --java "$GEN" \
-    --custom-package com.bliss.headlessdroid \
+    --custom-package com.bliss.headlessandroid \
     --min-sdk-version 29 \
     --target-sdk-version 36 \
     --version-code 1 \
@@ -268,14 +268,14 @@ echo "== apksigner"
 "$JAVA" -jar "$BUILD_TOOLS/lib/apksigner.jar" sign \
     --ks "$KEYSTORE" --ks-pass pass:android --key-pass pass:android \
     --ks-key-alias androiddebugkey \
-    --out "$BUILD/headless-droid-debug.apk" \
+    --out "$BUILD/headless-android-debug.apk" \
     "$BUILD/app-aligned.apk"
 
 "$JAVA" -jar "$BUILD_TOOLS/lib/apksigner.jar" verify --print-certs \
-    "$BUILD/headless-droid-debug.apk" > "$BUILD/verify.txt"
+    "$BUILD/headless-android-debug.apk" > "$BUILD/verify.txt"
 sed -n '1,5p' "$BUILD/verify.txt"
 
 echo
-echo "APK:  $BUILD/headless-droid-debug.apk"
-native "$BUILD_TOOLS/aapt2" dump badging "$BUILD/headless-droid-debug.apk" > "$BUILD/badging.txt"
+echo "APK:  $BUILD/headless-android-debug.apk"
+native "$BUILD_TOOLS/aapt2" dump badging "$BUILD/headless-android-debug.apk" > "$BUILD/badging.txt"
 sed -n '1,6p' "$BUILD/badging.txt"

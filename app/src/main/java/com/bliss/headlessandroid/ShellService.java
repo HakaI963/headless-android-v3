@@ -1,7 +1,8 @@
-package com.bliss.headlessdroid;
+package com.bliss.headlessandroid;
 
 import android.content.Context;
 import android.os.Binder;
+import android.os.HandlerThread;
 import android.os.Parcel;
 import android.os.RemoteException;
 import android.util.Log;
@@ -9,7 +10,7 @@ import android.util.Log;
 import org.json.JSONObject;
 
 /**
- * Shizuku user service: the privileged half of Headless Droid.
+ * Shizuku user service: the privileged half of Headless Android.
  *
  * <p>Shizuku starts this class in its own process with shell identity
  * ({@code uid 2000}), which is the only identity on a normal, unrooted phone
@@ -22,13 +23,15 @@ import org.json.JSONObject;
  * string; transaction 2 answers "pong" so the client can test liveness.
  */
 public class ShellService extends Binder {
-    private static final String TAG = "HeadlessDroid.Shell";
+    private static final String TAG = "HeadlessAndroid.Shell";
 
     private static final int TX_EXEC = 1;
     private static final int TX_PING = 2;
 
     private volatile Context context;
     private volatile Inputs inputs;
+    private volatile Automation automation;
+    private volatile HandlerThread automationThread;
 
     /** Shizuku instantiates the service with the no-arg constructor. */
     public ShellService() {
@@ -80,6 +83,27 @@ public class ShellService extends Binder {
         return local;
     }
 
+    /**
+     * UiAutomation callbacks need a real Looper, so the bridge owns a small
+     * thread here in the shell process. It is created on first use only.
+     */
+    private Automation automation() throws Exception {
+        Automation local = automation;
+        if (local == null) {
+            synchronized (this) {
+                if (automation == null) {
+                    HandlerThread thread = new HandlerThread("HeadlessAndroid-UiAutomation");
+                    thread.setDaemon(true);
+                    thread.start();
+                    automationThread = thread;
+                    automation = new Automation(thread.getLooper());
+                }
+                local = automation;
+            }
+        }
+        return local;
+    }
+
     @Override
     protected boolean onTransact(int code, Parcel data, Parcel reply, int flags)
             throws RemoteException {
@@ -118,7 +142,17 @@ public class ShellService extends Binder {
                     out.put("shizuku_version", rikka.shizuku.Shizuku.getVersion());
                     out.put("input_available", inputsOk());
                     out.put("input_reason", inputsReason());
+                    try {
+                        JSONObject ui = automation().execute(new JSONObject().put("op", "status"));
+                        out.put("ui_automation", ui);
+                    } catch (Throwable e) {
+                        out.put("ui_automation", new JSONObject()
+                                .put("available", false).put("error", String.valueOf(e.getMessage())));
+                    }
                     break;
+                }
+                case "ui": {
+                    return automation().execute(in).toString();
                 }
                 case "start": {
                     String component = in.optString("component", "");
@@ -240,6 +274,6 @@ public class ShellService extends Binder {
 
     @Override
     protected void dump(java.io.FileDescriptor fd, java.io.PrintWriter fout, String[] args) {
-        fout.println("Headless Droid shell service, uid=" + android.os.Process.myUid());
+        fout.println("Headless Android shell service, uid=" + android.os.Process.myUid());
     }
 }

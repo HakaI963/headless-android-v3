@@ -1,6 +1,7 @@
-package com.bliss.headlessdroid
+package com.bliss.headlessandroid
 
 import android.app.Activity
+import android.content.Intent
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
@@ -77,6 +78,9 @@ class SettingsActivity : Activity() {
         findViewById<View>(R.id.close_all).setOnClickListener {
             engine.closeAll()
             finish()
+        }
+        findViewById<View>(R.id.open_diagnostics).setOnClickListener {
+            startActivity(Intent(this, BootActivity::class.java))
         }
 
         select(columns, engine.columns())

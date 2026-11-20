@@ -16,43 +16,36 @@
         <item name="android:textColorHighlight">@color/raised</item>
     </style>
 
-    <!-- Chrome stays quiet: one hairline, one surface step. -->
-    <style name="Widget.Droid.Card" parent="">
-        <item name="android:background">@drawable/bg_card</item>
-        <item name="android:padding">16dp</item>
-    </style>
-
-    <style name="Widget.Droid.Panel" parent="">
-        <item name="android:background">@drawable/bg_panel</item>
-        <item name="android:padding">12dp</item>
-    </style>
-
     <style name="TextAppearance.Droid.Title" parent="">
-        <item name="android:textSize">20sp</item>
+        <item name="android:textSize">24sp</item>
         <item name="android:textColor">@color/text_primary</item>
-        <item name="android:letterSpacing">0.01</item>
-    </style>
-
-    <style name="TextAppearance.Droid.Section" parent="">
-        <item name="android:textSize">13sp</item>
-        <item name="android:textColor">@color/text_secondary</item>
-        <item name="android:letterSpacing">0.02</item>
-        <item name="android:textStyle">normal</item>
+        <item name="android:typeface">normal</item>
     </style>
 
     <style name="TextAppearance.Droid.Body" parent="">
-        <item name="android:textSize">15sp</item>
+        <item name="android:textSize">16sp</item>
         <item name="android:textColor">@color/text_primary</item>
     </style>
 
+    <style name="TextAppearance.Droid.Section" parent="">
+        <item name="android:textSize">14sp</item>
+        <item name="android:textColor">@color/text_secondary</item>
+    </style>
+
     <style name="TextAppearance.Droid.Secondary" parent="">
-        <item name="android:textSize">13sp</item>
+        <item name="android:textSize">14sp</item>
         <item name="android:textColor">@color/text_secondary</item>
     </style>
 
     <style name="TextAppearance.Droid.Micro" parent="">
-        <item name="android:textSize">11sp</item>
+        <item name="android:textSize">12sp</item>
         <item name="android:textColor">@color/text_muted</item>
+        <item name="android:fontFamily">monospace</item>
+    </style>
+
+    <style name="TextAppearance.Droid.Value" parent="">
+        <item name="android:textSize">13sp</item>
+        <item name="android:textColor">@color/text_primary</item>
         <item name="android:fontFamily">monospace</item>
     </style>
 </resources>

@@ -1,4 +1,4 @@
-package com.bliss.headlessdroid;
+package com.bliss.headlessandroid;
 
 import android.util.Log;
 
@@ -201,7 +201,7 @@ final class HttpServer {
 
         @Override
         public Thread newThread(Runnable runnable) {
-            Thread thread = new Thread(runnable, "HeadlessDroid-http-"
+            Thread thread = new Thread(runnable, "HeadlessAndroid-http-"
                     + count.incrementAndGet());
             thread.setDaemon(true);
             return thread;
@@ -248,7 +248,7 @@ final class HttpServer {
             return false;
         }
         running = true;
-        acceptor = new Thread(this::acceptLoop, "HeadlessDroid-http");
+        acceptor = new Thread(this::acceptLoop, "HeadlessAndroid-http");
         acceptor.setDaemon(true);
         acceptor.start();
         Log.i(Droid.TAG, "mcp endpoint listening on " + boundPort);

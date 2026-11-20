@@ -1,4 +1,4 @@
-package com.bliss.headlessdroid;
+package com.bliss.headlessandroid;
 
 import android.content.Context;
 import android.graphics.Bitmap;
@@ -24,7 +24,7 @@ import java.lang.reflect.Field;
  * {@link Shell} provides through Shizuku.
  */
 final class DisplayStack {
-    private static final String TAG = "HeadlessDroid";
+    private static final String TAG = "HeadlessAndroid";
 
     private final int width;
     private final int height;
@@ -98,7 +98,7 @@ final class DisplayStack {
             VirtualDisplay created = null;
             try {
                 created = manager.createVirtualDisplay(
-                        "HeadlessDroid", width, height, dpi, reader.getSurface(), flags);
+                        "HeadlessAndroid", width, height, dpi, reader.getSurface(), flags);
                 Display target = created == null ? null : created.getDisplay();
                 if (target != null) {
                     return new DisplayStack(width, height, dpi, reader, created,

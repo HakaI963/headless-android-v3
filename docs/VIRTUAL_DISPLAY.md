@@ -6,7 +6,7 @@ work.
 ## One display per slot
 
 Every slot owns a
-[`DisplayStack`](../app/src/main/java/com/bliss/headlessdroid/DisplayStack.java):
+[`DisplayStack`](../app/src/main/java/com/bliss/headlessandroid/DisplayStack.java):
 one `VirtualDisplay` plus one `ImageReader` whose surface the display renders
 into. The app process can create a public virtual display without any special
 permission, which is why the whole capture path lives in the app and only the
@@ -92,7 +92,7 @@ normalized 0..1 scale to the slot's pixels there, so a tap at the middle of tile
 ## Wake locks
 
 HyperOS suspends virtual displays together with the phone screen. While any
-app is on the grid, Headless Droid holds a `FULL_WAKE_LOCK` with its own
+app is on the grid, Headless Android holds a `FULL_WAKE_LOCK` with its own
 reference counting: it is taken in `launch` and released when the last slot
 closes (or when the wake-lock preference is turned off). There is no way to keep
 a virtual display alive through a screen-off without keeping the screen on,
@@ -100,7 +100,7 @@ and no way to wake the display while the phone is locked behind a secure
 keyguard — both are the system's rules, not the app's.
 
 That is also why the grid lives behind a foreground service
-([`GridService`](../app/src/main/java/com/bliss/headlessdroid/GridService.java)):
+([`GridService`](../app/src/main/java/com/bliss/headlessandroid/GridService.java)):
 the notification's job is to stop the process from being frozen while nine apps
 are being driven, including by an AI that is connected from another machine.
 
@@ -117,5 +117,5 @@ README for honesty:
 - **Protected surfaces.** Video that goes out through DRM-protected surfaces is
   not visible to an app-owned capture, for the same reason.
 
-Neither is a bug in the display, and nothing in Headless Droid tries to work
+Neither is a bug in the display, and nothing in Headless Android tries to work
 around them.

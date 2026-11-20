@@ -1,19 +1,28 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- App picker: search field on top, one dense list below. -->
+<!-- App picker as a bottom sheet: grabber, title, search, one dense list. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:background="@color/bg"
-    android:orientation="vertical">
+    android:layout_height="wrap_content"
+    android:background="@drawable/bg_sheet"
+    android:orientation="vertical"
+    android:paddingBottom="@dimen/space_4">
+
+    <View
+        android:layout_width="40dp"
+        android:layout_height="4dp"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginTop="@dimen/space_3"
+        android:background="@color/hairline_strong" />
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:paddingHorizontal="16dp"
-        android:paddingTop="16dp"
-        android:paddingBottom="12dp">
+        android:paddingStart="@dimen/space_5"
+        android:paddingTop="@dimen/space_4"
+        android:paddingEnd="@dimen/space_5"
+        android:paddingBottom="@dimen/space_3">
 
         <TextView
             style="@style/TextAppearance.Droid.Title"
@@ -24,8 +33,8 @@
 
         <ImageButton
             android:id="@+id/apps_close"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
+            android:layout_width="@dimen/control_h"
+            android:layout_height="@dimen/control_h"
             android:background="@drawable/bg_button"
             android:contentDescription="@string/action_close"
             android:padding="12dp"
@@ -36,28 +45,29 @@
     <EditText
         android:id="@+id/apps_search"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginHorizontal="16dp"
+        android:layout_height="@dimen/control_h"
+        android:layout_marginStart="@dimen/space_5"
+        android:layout_marginEnd="@dimen/space_5"
         android:background="@drawable/bg_field"
-        android:hint="@string/action_apps"
+        android:gravity="center_vertical"
+        android:hint="@string/apps_hint"
         android:imeOptions="actionSearch"
         android:inputType="text"
-        android:padding="12dp"
-        android:paddingEnd="12dp"
-        android:paddingStart="12dp"
+        android:paddingStart="@dimen/space_4"
+        android:paddingEnd="@dimen/space_4"
         android:textColor="@color/text_primary"
         android:textColorHint="@color/text_muted"
-        android:textSize="15sp" />
+        android:textSize="@dimen/text_secondary" />
 
     <ListView
         android:id="@+id/apps_list"
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
+        android:layout_height="360dp"
+        android:layout_marginTop="@dimen/space_3"
         android:clipToPadding="false"
         android:divider="@drawable/bg_hairline"
-        android:dividerHeight="1dp"
-        android:paddingTop="8dp"
+        android:dividerHeight="@dimen/hairline"
+        android:paddingTop="@dimen/space_2"
         android:scrollbarStyle="outsideOverlay" />
 
     <TextView
@@ -66,6 +76,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:gravity="center"
-        android:padding="24dp"
+        android:padding="@dimen/space_6"
+        android:text="@string/apps_empty"
         android:visibility="gone" />
 </LinearLayout>

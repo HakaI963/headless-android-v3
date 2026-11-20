@@ -1,4 +1,4 @@
-package com.bliss.headlessdroid;
+package com.bliss.headlessandroid;
 
 import android.app.ActivityOptions;
 import android.content.ComponentName;

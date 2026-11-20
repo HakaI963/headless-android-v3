@@ -1,10 +1,10 @@
 # Architecture
 
-Headless Droid is two processes and one screen.
+Headless Android is two processes and one screen.
 
 ```
 ┌─────────────────────────────┐          ┌──────────────────────────────┐
-│  com.bliss.headlessdroid    │          │ com.bliss.headlessdroid:shell│
+│  com.bliss.headlessandroid    │          │ com.bliss.headlessandroid:shell│
 │                             │          │                              │
 │  MainActivity (the grid)    │          │  ShellService (Binder)       │
 │  Engine        slots, pump  │          │  Cmds         am start       │
@@ -15,7 +15,7 @@ Headless Droid is two processes and one screen.
 └─────────────────────────────┘          └──────────────────────────────┘
             │
             ▼
-   /sdcard/Download/HeadlessDroid/{shots,videos}
+   /sdcard/Download/HeadlessAndroid/{shots,videos}
 ```
 
 ## Why the split
@@ -41,9 +41,9 @@ no state.
 
 ### Engine
 
-[`Engine`](../app/src/main/java/com/bliss/headlessdroid/Engine.java) is the only
+[`Engine`](../app/src/main/java/com/bliss/headlessandroid/Engine.java) is the only
 object with authority over the grid. It is a singleton created in
-[`App.onCreate`](../app/src/main/java/com/bliss/headlessdroid/App.java), owns a
+[`App.onCreate`](../app/src/main/java/com/bliss/headlessandroid/App.java), owns a
 single `HandlerThread`, and never touches the UI thread.
 
 - **Slots.** A fixed array of 9 `Tile`s. `launch(pkg)` allocates the first free
@@ -65,7 +65,7 @@ single `HandlerThread`, and never touches the UI thread.
 | Thread | What it does |
 |---|---|
 | main | draws, handles taps, any view work |
-| `HeadlessDroid` | slot lifecycle, `am start` results, frame pump |
+| `HeadlessAndroid` | slot lifecycle, `am start` results, frame pump |
 | per connection | one thread per HTTP/MCP connection, all daemons |
 | per recording | one thread owns its `MediaCodec` |
 | `:shell` | the Shizuku user service process |
@@ -76,7 +76,7 @@ confined to its own thread.
 
 ## Shell process
 
-[`ShellService`](../app/src/main/java/com/bliss/headlessdroid/ShellService.java)
+[`ShellService`](../app/src/main/java/com/bliss/headlessandroid/ShellService.java)
 is a plain `Binder` (Shizuku 13 declares no `IUserService` in its jar, so the
 protocol is ours). Two transactions: `TX_EXEC=1` takes one JSON command string
 and replies with a JSON string; `TX_PING=2` answers `pong`.
@@ -88,8 +88,8 @@ and replies with a JSON string; `TX_PING=2` answers `pong`.
 
 The command set is deliberately small — start, stop, tap, long press, swipe,
 key, text, info — because everything else in the app can be done by the app
-itself. [`Cmds`](../app/src/main/java/com/bliss/headlessdroid/Cmds.java) runs the
-shell command, [`Inputs`](../app/src/main/java/com/bliss/headlessdroid/Inputs.java)
+itself. [`Cmds`](../app/src/main/java/com/bliss/headlessandroid/Cmds.java) runs the
+shell command, [`Inputs`](../app/src/main/java/com/bliss/headlessandroid/Inputs.java)
 does the reflection injection; both report failure rather than throwing, so a
 wrong ROM answers "ok: false" instead of a crash.
 

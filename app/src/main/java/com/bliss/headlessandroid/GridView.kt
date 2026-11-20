@@ -1,4 +1,4 @@
-package com.bliss.headlessdroid
+package com.bliss.headlessandroid
 
 import android.content.Context
 import android.graphics.Canvas
@@ -26,7 +26,7 @@ class GridView : ViewGroup {
         fun onSelect(slot: Int)
     }
 
-    private val gap: Float = Ui.dp(context, 8f).toFloat()
+    private val gap: Float = Ui.dp(context, 12f).toFloat()
     private val border = Paint(Paint.ANTI_ALIAS_FLAG)
     private val plus = Paint(Paint.ANTI_ALIAS_FLAG)
     private val label = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -43,7 +43,7 @@ class GridView : ViewGroup {
     /**
      * The constructor the layout inflater actually calls.
      *
-     * <p>Without it, inflating `<com.bliss.headlessdroid.GridView>` throws
+     * <p>Without it, inflating `<com.bliss.headlessandroid.GridView>` throws
      * [NoSuchMethodException] wrapped in an [android.view.InflateException],
      * which kills the activity before anything is drawn.
      */
@@ -174,7 +174,7 @@ class GridView : ViewGroup {
             plus.strokeWidth = 1.5f * density
             plus.color = Ui.color(context, R.color.text_muted)
             plus.strokeCap = Paint.Cap.ROUND
-            label.textSize = 13f * resources.displayMetrics.scaledDensity
+            label.textSize = 14f * resources.displayMetrics.scaledDensity
             label.color = Ui.color(context, R.color.text_muted)
             label.isAntiAlias = true
         }
@@ -184,7 +184,7 @@ class GridView : ViewGroup {
             val width = width.toFloat()
             val height = height.toFloat()
             box.set(0.5f * density, 0.5f * density, width - 0.5f * density, height - 0.5f * density)
-            canvas.drawRoundRect(box, 12f * density, 12f * density, border)
+            canvas.drawRoundRect(box, 14f * density, 14f * density, border)
 
             val centerX = width / 2f
             val centerY = height / 2f - 8f * density

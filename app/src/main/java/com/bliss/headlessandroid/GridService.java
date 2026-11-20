@@ -1,4 +1,4 @@
-package com.bliss.headlessdroid;
+package com.bliss.headlessandroid;
 
 import android.app.Notification;
 import android.app.NotificationChannel;
@@ -23,7 +23,7 @@ import android.util.Log;
 public class GridService extends Service {
     private static final String CHANNEL = "grid";
     private static final int NOTIFICATION_ID = 71;
-    private static final String ACTION_STOP_ALL = "com.bliss.headlessdroid.STOP_ALL";
+    private static final String ACTION_STOP_ALL = "com.bliss.headlessandroid.STOP_ALL";
 
     /** Starts the service when apps run, stops it when the grid is empty. */
     public static void sync(Context context) {
@@ -126,8 +126,8 @@ public class GridService extends Service {
         } else {
             builder = new Notification.Builder(context);
         }
-        builder.setSmallIcon(com.bliss.headlessdroid.R.drawable.ic_grid)
-                .setContentTitle("Headless Droid")
+        builder.setSmallIcon(com.bliss.headlessandroid.R.drawable.ic_grid)
+                .setContentTitle("Headless Android")
                 .setContentText(line)
                 .setContentIntent(openIntent)
                 .addAction(0, "Close all", stopIntent)
